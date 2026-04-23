@@ -16,14 +16,39 @@ import { useDriverAuth } from '@/context/driver-auth-context';
 import driverSocket from '@/lib/driverSocket';
 
 const teal = '#008080';
-const GOOGLE_MAPS_APIKEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY ?? '';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type LatLng = { latitude: number; longitude: number };
+type MapMode = 'navigate' | 'trip';  // navigate = driver→pickup | trip = pickup→dropoff
 
+// ── OSRM route fetcher ────────────────────────────────────────────────────────
+async function fetchOsrmRoute(from: LatLng, to: LatLng) {
+  const url =
+    `https://router.project-osrm.org/route/v1/driving/` +
+    `${from.longitude},${from.latitude};${to.longitude},${to.latitude}` +
+    `?overview=full&geometries=geojson`;
+
+  const res  = await fetch(url);
+  const data = await res.json();
+
+  if (!data?.routes?.length) throw new Error('No route found');
+
+  const route = data.routes[0];
+  return {
+    coords: route.geometry.coordinates.map(
+      ([lng, lat]: [number, number]) => ({ latitude: lat, longitude: lng })
+    ) as LatLng[],
+    distanceKm: (route.distance / 1000).toFixed(1),
+    durationMin: Math.round(route.duration / 60),
+  };
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 export default function RidePreviewScreen() {
   const router = useRouter();
   const { driver } = useDriverAuth();
+  const mapRef = useRef<MapView>(null);
+
   const params = useLocalSearchParams<{
     id: string;
     passengerName: string;
@@ -31,55 +56,59 @@ export default function RidePreviewScreen() {
     price: string;
     pLat: string; pLng: string; pName: string;
     dLat: string; dLng: string; dName: string;
+    /** Driver's current location (for navigate-to-pickup mode) */
+    drLat?: string; drLng?: string;
   }>();
 
-  const mapRef = useRef<MapView>(null);
-
-  // Parse URL params
   const rideId       = params.id;
   const passengerName = params.passengerName ?? 'Passenger';
-  const vehicleType  = params.vehicleType ?? 'Ride';
-  const price        = Number(params.price ?? 0);
-  const pLat = parseFloat(params.pLat ?? '0');
-  const pLng = parseFloat(params.pLng ?? '0');
+  const vehicleType  = params.vehicleType   ?? 'Ride';
+  const price        = Number(params.price  ?? 0);
+
+  const pickup:  LatLng = { latitude: parseFloat(params.pLat ?? '0'), longitude: parseFloat(params.pLng ?? '0') };
+  const dropoff: LatLng = { latitude: parseFloat(params.dLat ?? '0'), longitude: parseFloat(params.dLng ?? '0') };
   const pName = params.pName ?? '';
-  const dLat = parseFloat(params.dLat ?? '0');
-  const dLng = parseFloat(params.dLng ?? '0');
   const dName = params.dName ?? '';
 
-  // Route polyline state (fetched from OSRM — no API key required)
-  const [routeCoords, setRouteCoords] = useState<LatLng[]>([]);
-  const [routeDistance, setRouteDistance] = useState('');
-  const [routeDuration, setRouteDuration] = useState('');
-  const [loadingRoute, setLoadingRoute] = useState(true);
+  // Driver's current coords (passed from home.tsx). Fall back to pickup area if missing.
+  const hasDriverCoords = !!(params.drLat && params.drLng);
+  const driverPos: LatLng = hasDriverCoords
+    ? { latitude: parseFloat(params.drLat!), longitude: parseFloat(params.drLng!) }
+    : pickup;
 
-  const [accepting, setAccepting] = useState(false);
+  // ── Map mode ──────────────────────────────────────────────────────────────
+  // 'navigate' = driver current position → passenger pickup (where to go NOW)
+  // 'trip'     = passenger pickup → dropoff (the ride route preview)
+  const [mapMode, setMapMode] = useState<MapMode>(hasDriverCoords ? 'navigate' : 'trip');
 
-  // ── Fetch route via OSRM (free, no key) ──────────────────────────────────
+  // ── Route state (one per mode) ────────────────────────────────────────────
+  type RouteState = { coords: LatLng[]; distanceKm: string; durationMin: number } | null;
+  const [navigateRoute, setNavigateRoute] = useState<RouteState>(null);
+  const [tripRoute, setTripRoute]         = useState<RouteState>(null);
+  const [loadingRoute, setLoadingRoute]   = useState(true);
+  const [accepting, setAccepting]         = useState(false);
+
+  // ── Fetch both routes on mount ────────────────────────────────────────────
   useEffect(() => {
-    if (!pLat || !pLng || !dLat || !dLng) return;
-
-    const fetchRoute = async () => {
+    const loadRoutes = async () => {
+      setLoadingRoute(true);
       try {
-        const url =
-          `https://router.project-osrm.org/route/v1/driving/` +
-          `${pLng},${pLat};${dLng},${dLat}?overview=full&geometries=geojson`;
+        const [navResult, tripResult] = await Promise.allSettled([
+          hasDriverCoords ? fetchOsrmRoute(driverPos, pickup) : Promise.reject('no driver coords'),
+          fetchOsrmRoute(pickup, dropoff),
+        ]);
 
-        const res = await fetch(url);
-        const data = await res.json();
+        if (navResult.status === 'fulfilled')  setNavigateRoute(navResult.value);
+        if (tripResult.status === 'fulfilled') setTripRoute(tripResult.value);
 
-        if (data?.routes?.length) {
-          const route = data.routes[0];
-          const coords = route.geometry.coordinates.map(
-            ([lng, lat]: [number, number]) => ({ latitude: lat, longitude: lng })
-          );
-          setRouteCoords(coords);
-          setRouteDistance(`${(route.distance / 1000).toFixed(1)} km`);
-          setRouteDuration(`${Math.round(route.duration / 60)} min`);
+        // Fit map to the default mode's route
+        const primaryRoute =
+          navResult.status === 'fulfilled' ? navResult.value :
+          tripResult.status === 'fulfilled' ? tripResult.value : null;
 
-          // Fit map to cover both markers + the route
+        if (primaryRoute) {
           setTimeout(() => {
-            mapRef.current?.fitToCoordinates(coords, {
+            mapRef.current?.fitToCoordinates(primaryRoute.coords, {
               edgePadding: { top: 80, right: 40, bottom: 340, left: 40 },
               animated: true,
             });
@@ -92,32 +121,38 @@ export default function RidePreviewScreen() {
       }
     };
 
-    fetchRoute();
-  }, [pLat, pLng, dLat, dLng]);
+    loadRoutes();
+  }, []);
 
-  // ── Accept Ride ───────────────────────────────────────────────────────────
+  // ── Switch mode + re-fit map ──────────────────────────────────────────────
+  const switchMode = (mode: MapMode) => {
+    setMapMode(mode);
+    const targetRoute = mode === 'navigate' ? navigateRoute : tripRoute;
+    if (targetRoute?.coords.length) {
+      mapRef.current?.fitToCoordinates(targetRoute.coords, {
+        edgePadding: { top: 80, right: 40, bottom: 340, left: 40 },
+        animated: true,
+      });
+    }
+  };
+
+  // Active route for the map
+  const activeRoute = mapMode === 'navigate' ? navigateRoute : tripRoute;
+  const activeStats = activeRoute
+    ? { distance: `${activeRoute.distanceKm} km`, duration: `${activeRoute.durationMin} min` }
+    : { distance: '—', duration: '—' };
+
+  // ── Accept ────────────────────────────────────────────────────────────────
   const handleAccept = () => {
-    if (!driverSocket.connected) return;
-    if (!driver?.id) return;
-
+    if (!driverSocket.connected || !driver?.id) return;
     setAccepting(true);
-
-    driverSocket.emit('acceptRide', {
-      rideId,
-      driverId: driver.id,
-    });
-
-    console.log('[RidePreview] acceptRide emitted for rideId:', rideId);
-
-    // Navigate to an Active Tracker screen (replace so back button skips preview)
-    // Adjust the pathname to whatever your active tracker route is.
+    driverSocket.emit('acceptRide', { rideId, driverId: driver.id });
+    console.log('[RidePreview] acceptRide emitted:', rideId);
     router.replace('/(tabs)/home');
   };
 
   // ── Decline ───────────────────────────────────────────────────────────────
-  const handleDecline = () => {
-    router.back();
-  };
+  const handleDecline = () => router.back();
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -132,78 +167,101 @@ export default function RidePreviewScreen() {
         provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
         mapType="standard"
         initialRegion={{
-          latitude: pLat || 6.9271,
-          longitude: pLng || 79.8612,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
+          latitude: pickup.latitude || 6.9271,
+          longitude: pickup.longitude || 79.8612,
+          latitudeDelta: 0.06,
+          longitudeDelta: 0.06,
         }}>
 
-        {/* Pickup Marker */}
-        {pLat !== 0 && (
-          <Marker coordinate={{ latitude: pLat, longitude: pLng }} anchor={{ x: 0.5, y: 1 }} zIndex={4}>
+        {/* Driver position marker (navigate mode) */}
+        {mapMode === 'navigate' && hasDriverCoords && (
+          <Marker coordinate={driverPos} anchor={{ x: 0.5, y: 0.5 }} zIndex={5}>
+            <View style={styles.driverMarker}>
+              <Ionicons name="car-sport" size={16} color="#FFF" />
+            </View>
+          </Marker>
+        )}
+
+        {/* Pickup marker */}
+        {pickup.latitude !== 0 && (
+          <Marker coordinate={pickup} anchor={{ x: 0.5, y: 1 }} zIndex={4}>
             <View style={styles.markerPill}>
               <View style={[styles.markerDot, { backgroundColor: '#169F95' }]} />
-              <Text style={styles.markerText} numberOfLines={1}>
-                {pName || 'Pickup'}
-              </Text>
+              <Text style={styles.markerText} numberOfLines={1}>{pName || 'Pickup'}</Text>
             </View>
-            <View style={[styles.markerPointer, { borderTopColor: '#FFFFFF' }]} />
+            <View style={styles.markerPointer} />
           </Marker>
         )}
 
-        {/* Dropoff Marker */}
-        {dLat !== 0 && (
-          <Marker coordinate={{ latitude: dLat, longitude: dLng }} anchor={{ x: 0.5, y: 1 }} zIndex={4}>
+        {/* Dropoff marker (trip mode) */}
+        {mapMode === 'trip' && dropoff.latitude !== 0 && (
+          <Marker coordinate={dropoff} anchor={{ x: 0.5, y: 1 }} zIndex={4}>
             <View style={styles.markerPill}>
               <View style={[styles.markerDot, { backgroundColor: '#E74C3C' }]} />
-              <Text style={styles.markerText} numberOfLines={1}>
-                {dName || 'Drop-off'}
-              </Text>
+              <Text style={styles.markerText} numberOfLines={1}>{dName || 'Drop-off'}</Text>
             </View>
-            <View style={[styles.markerPointer, { borderTopColor: '#FFFFFF' }]} />
+            <View style={styles.markerPointer} />
           </Marker>
         )}
 
-        {/* Route Polyline — outer border */}
-        {routeCoords.length > 0 && (
+        {/* Route polyline — outer glow */}
+        {activeRoute && (
           <Polyline
-            coordinates={routeCoords}
-            strokeColor="#017270"
+            coordinates={activeRoute.coords}
+            strokeColor={mapMode === 'navigate' ? '#1A6B3C' : '#017270'}
             strokeWidth={8}
-            lineJoin="round"
-            lineCap="round"
-            zIndex={2}
+            lineJoin="round" lineCap="round" zIndex={2}
           />
         )}
-        {/* Route Polyline — inner teal */}
-        {routeCoords.length > 0 && (
+        {/* Route polyline — inner */}
+        {activeRoute && (
           <Polyline
-            coordinates={routeCoords}
-            strokeColor="#169F95"
+            coordinates={activeRoute.coords}
+            strokeColor={mapMode === 'navigate' ? '#27AE60' : '#169F95'}
             strokeWidth={4}
-            lineJoin="round"
-            lineCap="round"
-            zIndex={3}
+            lineJoin="round" lineCap="round" zIndex={3}
           />
         )}
       </MapView>
 
-      {/* Back button */}
+      {/* ── Top bar ── */}
       <SafeAreaView style={styles.topSafe}>
         <TouchableOpacity style={styles.backBtn} onPress={handleDecline}>
           <Feather name="arrow-left" size={22} color="#102A28" />
         </TouchableOpacity>
-        <View style={styles.topBadge}>
-          <Text style={styles.topBadgeText}>Ride Preview</Text>
+
+        {/* Mode toggle pill */}
+        <View style={styles.modeToggle}>
+          <TouchableOpacity
+            style={[styles.modeBtn, mapMode === 'navigate' && styles.modeBtnActive]}
+            onPress={() => switchMode('navigate')}>
+            <Ionicons
+              name="navigate-outline"
+              size={14}
+              color={mapMode === 'navigate' ? '#FFF' : '#617C79'}
+            />
+            <Text style={[styles.modeBtnText, mapMode === 'navigate' && styles.modeBtnTextActive]}>
+              Navigate
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.modeBtn, mapMode === 'trip' && styles.modeBtnActive]}
+            onPress={() => switchMode('trip')}>
+            <Ionicons
+              name="map-outline"
+              size={14}
+              color={mapMode === 'trip' ? '#FFF' : '#617C79'}
+            />
+            <Text style={[styles.modeBtnText, mapMode === 'trip' && styles.modeBtnTextActive]}>
+              Trip Route
+            </Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
 
-      {/* ── Bottom Sheet ─────────────────────────────────────────────────── */}
+      {/* ── Bottom Sheet ── */}
       <View style={styles.sheet}>
-        {/* Drag handle */}
-        <View style={styles.handleRow}>
-          <View style={styles.handle} />
-        </View>
+        <View style={styles.handleRow}><View style={styles.handle} /></View>
 
         {loadingRoute ? (
           <View style={styles.loadingWrap}>
@@ -212,34 +270,43 @@ export default function RidePreviewScreen() {
           </View>
         ) : (
           <>
-            {/* Eyebrow + vehicle */}
-            <Text style={styles.sheetEyebrow}>RIDE REQUEST</Text>
-            <Text style={styles.sheetTitle}>{vehicleType} Ride</Text>
+            {/* Mode context label */}
+            <Text style={styles.sheetEyebrow}>
+              {mapMode === 'navigate' ? '🧭 NAVIGATE TO PASSENGER' : '🚗 RIDE ROUTE PREVIEW'}
+            </Text>
+            <Text style={styles.sheetTitle}>{vehicleType} · {passengerName}</Text>
 
-            {/* Stats row */}
+            {/* Stat chips */}
             <View style={styles.statsRow}>
-              <StatChip icon="map-pin" label="Distance" value={routeDistance || '—'} />
-              <StatChip icon="clock"   label="Duration" value={routeDuration || '—'} />
-              <StatChip icon="user"    label="Passenger" value={passengerName} />
-              <StatChip icon="dollar-sign" label="Fare" value={`LKR ${price.toLocaleString()}`} color="#27AE60" />
+              <StatChip icon="map-pin"       label="Distance"  value={activeStats.distance} />
+              <StatChip icon="clock"         label="ETA"       value={activeStats.duration} />
+              <StatChip icon="user"          label="Passenger" value={passengerName} />
+              <StatChip
+                icon="dollar-sign"
+                label="Fare"
+                value={`LKR ${price.toLocaleString()}`}
+                color="#27AE60"
+              />
             </View>
 
-            {/* Route block */}
+            {/* Route summary */}
             <View style={styles.routeBlock}>
-              <RoutePoint
-                color="#169F95"
-                label="PICKUP"
-                value={pName || `${pLat.toFixed(4)}, ${pLng.toFixed(4)}`}
-              />
-              <View style={styles.routeDivider} />
-              <RoutePoint
-                color="#E74C3C"
-                label="DROP-OFF"
-                value={dName || `${dLat.toFixed(4)}, ${dLng.toFixed(4)}`}
-              />
+              {mapMode === 'navigate' ? (
+                <>
+                  <RoutePoint color="#4A6FA5" label="YOUR LOCATION" value="Current position" />
+                  <View style={styles.routeDivider} />
+                  <RoutePoint color="#169F95" label="PASSENGER PICKUP" value={pName || `${pickup.latitude.toFixed(4)}, ${pickup.longitude.toFixed(4)}`} />
+                </>
+              ) : (
+                <>
+                  <RoutePoint color="#169F95" label="PICKUP"   value={pName || `${pickup.latitude.toFixed(4)}, ${pickup.longitude.toFixed(4)}`} />
+                  <View style={styles.routeDivider} />
+                  <RoutePoint color="#E74C3C" label="DROP-OFF" value={dName || `${dropoff.latitude.toFixed(4)}, ${dropoff.longitude.toFixed(4)}`} />
+                </>
+              )}
             </View>
 
-            {/* Action buttons */}
+            {/* Actions */}
             <View style={styles.actionRow}>
               <TouchableOpacity style={styles.declineBtn} onPress={handleDecline} disabled={accepting}>
                 <Ionicons name="close-circle-outline" size={20} color="#617C79" />
@@ -266,7 +333,9 @@ export default function RidePreviewScreen() {
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
-function StatChip({ icon, label, value, color = teal }: {
+function StatChip({
+  icon, label, value, color = teal,
+}: {
   icon: keyof typeof Feather.glyphMap;
   label: string;
   value: string;
@@ -297,13 +366,12 @@ function RoutePoint({ color, label, value }: { color: string; label: string; val
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#EAE6DF' },
 
-  // Top safe row
   topSafe: {
     position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20,
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16,
     paddingTop: Platform.OS === 'android' ? 36 : 8,
-    gap: 12,
+    gap: 10,
   },
   backBtn: {
     width: 44, height: 44, borderRadius: 22,
@@ -312,16 +380,32 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.12, shadowRadius: 8, elevation: 4,
   },
-  topBadge: {
+
+  // Mode toggle
+  modeToggle: {
+    flex: 1, flexDirection: 'row',
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 14, paddingVertical: 10,
-    borderRadius: 16,
+    borderRadius: 22, padding: 4,
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1, shadowRadius: 8, elevation: 3,
+    shadowOpacity: 0.1, shadowRadius: 8, elevation: 4,
   },
-  topBadgeText: { fontSize: 14, fontWeight: '800', color: '#102A28' },
+  modeBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 8, borderRadius: 18, gap: 5,
+  },
+  modeBtnActive: { backgroundColor: teal },
+  modeBtnText: { fontSize: 12, fontWeight: '800', color: '#617C79' },
+  modeBtnTextActive: { color: '#FFF' },
 
   // Markers
+  driverMarker: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: '#4A6FA5',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 3, borderColor: '#FFF',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2, shadowRadius: 8, elevation: 6,
+  },
   markerPill: {
     backgroundColor: '#FFFFFF', paddingHorizontal: 10, paddingVertical: 5,
     borderRadius: 18, flexDirection: 'row', alignItems: 'center',
@@ -342,32 +426,22 @@ const styles = StyleSheet.create({
     position: 'absolute', left: 0, right: 0, bottom: 0,
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    padding: 20,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 20,
+    padding: 20, paddingBottom: Platform.OS === 'ios' ? 36 : 20,
     shadowColor: '#000', shadowOffset: { width: 0, height: -10 },
     shadowOpacity: 0.08, shadowRadius: 20, elevation: 20,
   },
   handleRow: { alignItems: 'center', marginBottom: 14 },
-  handle: {
-    width: 36, height: 4, borderRadius: 2,
-    backgroundColor: '#A0B3B2', opacity: 0.5,
-  },
-  sheetEyebrow: { fontSize: 11, fontWeight: '900', color: teal, marginBottom: 2 },
-  sheetTitle:   { fontSize: 24, fontWeight: '900', color: '#102A28', marginBottom: 16 },
-
-  statsRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-
+  handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: '#A0B3B2', opacity: 0.5 },
+  sheetEyebrow: { fontSize: 11, fontWeight: '900', color: teal, marginBottom: 4 },
+  sheetTitle:   { fontSize: 22, fontWeight: '900', color: '#102A28', marginBottom: 14 },
+  statsRow:     { flexDirection: 'row', gap: 8, marginBottom: 14 },
   routeBlock: {
     backgroundColor: '#F7FBFA', borderRadius: 16,
     borderWidth: 1, borderColor: '#D9E9E6',
-    padding: 14, marginBottom: 18,
+    padding: 14, marginBottom: 16,
   },
-  routeDivider: {
-    height: 1, backgroundColor: '#D9E9E6',
-    marginVertical: 10, marginLeft: 22,
-  },
-
-  actionRow: { flexDirection: 'row', gap: 12 },
+  routeDivider: { height: 1, backgroundColor: '#D9E9E6', marginVertical: 10, marginLeft: 22 },
+  actionRow:  { flexDirection: 'row', gap: 12 },
   declineBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     paddingVertical: 15, borderRadius: 16,
@@ -381,7 +455,6 @@ const styles = StyleSheet.create({
   },
   acceptBtnDisabled: { backgroundColor: '#4A9A98' },
   acceptBtnText: { fontSize: 15, fontWeight: '900', color: '#FFFFFF' },
-
   loadingWrap: { alignItems: 'center', paddingVertical: 40 },
   loadingText: { marginTop: 10, fontWeight: '700', color: teal },
 });
@@ -397,9 +470,9 @@ const chipStyles = StyleSheet.create({
 });
 
 const routeStyles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  dot: { width: 12, height: 12, borderRadius: 6, marginTop: 3, flexShrink: 0 },
-  textWrap: { flex: 1 },
-  label: { fontSize: 10, fontWeight: '900', color: '#8CA1A0', marginBottom: 2, letterSpacing: 0.4 },
-  value: { fontSize: 14, fontWeight: '700', color: '#102A28', lineHeight: 20 },
+  row:     { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  dot:     { width: 12, height: 12, borderRadius: 6, marginTop: 3, flexShrink: 0 },
+  textWrap:{ flex: 1 },
+  label:   { fontSize: 10, fontWeight: '900', color: '#8CA1A0', marginBottom: 2, letterSpacing: 0.4 },
+  value:   { fontSize: 14, fontWeight: '700', color: '#102A28', lineHeight: 20 },
 });
