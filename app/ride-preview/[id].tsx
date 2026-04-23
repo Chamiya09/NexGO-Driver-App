@@ -148,7 +148,20 @@ export default function RidePreviewScreen() {
     setAccepting(true);
     driverSocket.emit('acceptRide', { rideId, driverId: driver.id });
     console.log('[RidePreview] acceptRide emitted:', rideId);
-    router.replace('/(tabs)/home');
+    
+    // Pass same params but head to the active ride screen
+    router.replace({
+      pathname: '/active-ride/[id]',
+      params: {
+        id: rideId,
+        passengerName,
+        vehicleType,
+        price: String(price),
+        pLat: String(pickup.latitude), pLng: String(pickup.longitude), pName,
+        dLat: String(dropoff.latitude), dLng: String(dropoff.longitude), dName,
+        ...(hasDriverCoords && { drLat: String(driverPos.latitude), drLng: String(driverPos.longitude) })
+      }
+    });
   };
 
   // ── Decline ───────────────────────────────────────────────────────────────
