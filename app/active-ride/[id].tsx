@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useDriverAuth } from '@/context/driver-auth-context';
 import driverSocket from '@/lib/driverSocket';
@@ -174,14 +174,14 @@ export default function ActiveRideScreen() {
       <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFillObject}
-        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-        mapType="standard"
+        mapType="none"
         initialRegion={{
           latitude: pickup.latitude || 6.9271,
           longitude: pickup.longitude || 79.8612,
           latitudeDelta: 0.05,
           longitudeDelta: 0.05,
         }}>
+        <UrlTile urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maximumZ={19} flipY={false} />
 
         {/* Driver marker (shows current position if heading to pickup) */}
         {isAccepted && (

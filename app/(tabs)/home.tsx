@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, UrlTile } from 'react-native-maps';
 import { useDriverAuth } from '@/context/driver-auth-context';
 import { useNotifications } from '@/context/notifications-context';
 import driverSocket from '@/lib/driverSocket';
@@ -195,8 +195,7 @@ export default function DriverHomeScreen() {
         <MapView
           ref={mapRef}
           style={StyleSheet.absoluteFillObject}
-          provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-          mapType="standard"
+          mapType="none"
           showsUserLocation={false}
           showsMyLocationButton={false}
           initialRegion={{
@@ -204,6 +203,7 @@ export default function DriverHomeScreen() {
             latitudeDelta:  0.025,
             longitudeDelta: 0.025,
           }}>
+          <UrlTile urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maximumZ={19} flipY={false} />
 
           {/* ── Driver position marker ── */}
           <Marker coordinate={driverCoords} anchor={{ x: 0.5, y: 0.5 }}>
