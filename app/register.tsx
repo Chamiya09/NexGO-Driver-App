@@ -47,7 +47,7 @@ export default function DriverRegisterScreen() {
     <AuthShell
       eyebrow="Start driving"
       title="Create your driver account"
-      subtitle="Set up NexGO Driver once and add your vehicle details from your profile after sign in.">
+      subtitle="Set up NexGO Driver once and complete your profile after sign in.">
       <View style={styles.formStack}>
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Full name</Text>

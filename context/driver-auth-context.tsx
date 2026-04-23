@@ -3,16 +3,6 @@ import React, { createContext, useContext, useMemo, useState } from 'react';
 import { API_BASE_URL, parseApiResponse } from '@/lib/api';
 import { clearDriverToken, setDriverToken } from '@/lib/driver-session';
 
-export type DriverVehicle = {
-  licensePlate?: string;
-  carModel?: string;
-  year?: string;
-  color?: string;
-  category?: string;
-  registrationNumber?: string;
-  status?: string;
-};
-
 export type DriverDocument = {
   documentType: 'license' | 'insurance' | 'registration';
   fileUrl?: string;
@@ -30,7 +20,6 @@ export type DriverProfile = {
   emergencyContact?: string;
   profileImageUrl?: string;
   status?: string;
-  vehicle?: DriverVehicle;
   documents?: DriverDocument[];
   security?: {
     twoStepVerificationEnabled?: boolean;
@@ -57,8 +46,6 @@ type UpdateProfilePayload = {
   profileImageUrl?: string;
 };
 
-type UpdateVehiclePayload = Required<Omit<DriverVehicle, 'status'>>;
-
 type AuthResponse = {
   token: string;
   driver: DriverProfile;
@@ -75,7 +62,6 @@ type DriverAuthContextValue = {
   login: (payload: LoginPayload) => Promise<void>;
   register: (payload: RegisterPayload) => Promise<void>;
   updateProfile: (payload: UpdateProfilePayload) => Promise<void>;
-  updateVehicle: (payload: UpdateVehiclePayload) => Promise<void>;
   updateDocument: (documentType: DriverDocument['documentType'], fileUrl: string) => Promise<void>;
   updateSecurity: (twoStepVerificationEnabled: boolean) => Promise<void>;
   logout: () => void;
@@ -169,21 +155,6 @@ export function DriverAuthProvider({ children }: { children: React.ReactNode }) 
     setDriver(data.driver);
   };
 
-  const updateVehicle = async (payload: UpdateVehiclePayload) => {
-    const nextToken = requireToken();
-    const response = await fetch(`${API_BASE_URL}/driver-auth/me/vehicle`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${nextToken}`,
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await parseApiResponse<DriverResponse>(response);
-    setDriver(data.driver);
-  };
-
   const updateDocument = async (documentType: DriverDocument['documentType'], fileUrl: string) => {
     const nextToken = requireToken();
     const response = await fetch(`${API_BASE_URL}/driver-auth/me/documents/${documentType}`, {
@@ -228,7 +199,6 @@ export function DriverAuthProvider({ children }: { children: React.ReactNode }) 
       login,
       register,
       updateProfile,
-      updateVehicle,
       updateDocument,
       updateSecurity,
       logout,

@@ -22,7 +22,7 @@ type ProfileSection = {
   title: string;
   subtitle: string;
   icon: keyof typeof Ionicons.glyphMap;
-  route?: '/profile/personal-details' | '/profile/vehicle-details' | '/profile/document-uploads' | '/profile/security';
+  route?: '/profile/personal-details' | '/profile/document-uploads' | '/profile/security';
   badge?: string;
 };
 
@@ -32,12 +32,6 @@ const baseProfileSections: ProfileSection[] = [
     subtitle: 'Driver identity, phone, email, and account profile',
     icon: 'person-circle-outline',
     route: '/profile/personal-details',
-  },
-  {
-    title: 'Vehicle Details',
-    subtitle: 'License plate ABC-4821, Toyota Prius 2020',
-    icon: 'car-sport-outline',
-    route: '/profile/vehicle-details',
   },
   {
     title: 'Document Uploads',
@@ -64,26 +58,14 @@ export default function DriverProfileScreen() {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() || '')
     .join('');
-  const vehicle = driver?.vehicle;
-  const vehicleSummary =
-    vehicle?.licensePlate && vehicle?.carModel
-      ? `License plate ${vehicle.licensePlate}, ${vehicle.carModel}${vehicle.year ? ` ${vehicle.year}` : ''}`
-      : 'Add your license plate and car model';
   const approvedDocuments = (driver?.documents || []).filter((document) => document.status === 'approved').length;
   const documentCount = driver?.documents?.length || 3;
   const profileMetrics = [
     { label: 'Status', value: driver?.status || 'pending', icon: 'shield-checkmark-outline' as const },
     { label: 'Docs', value: `${approvedDocuments}/${documentCount}`, icon: 'document-text-outline' as const },
-    { label: 'Vehicle', value: vehicle?.status || 'pending', icon: 'car-sport-outline' as const },
+    { label: 'Security', value: driver?.security?.twoStepVerificationEnabled ? '2FA On' : '2FA Off', icon: 'shield-outline' as const },
   ];
-  const profileSections = baseProfileSections.map((section) =>
-    section.title === 'Vehicle Details'
-      ? {
-          ...section,
-          subtitle: vehicleSummary,
-        }
-      : section
-  );
+  const profileSections = baseProfileSections;
 
   const confirmLogout = () => {
     Alert.alert('Log out', 'Do you want to sign out of this driver device?', [
@@ -130,7 +112,7 @@ export default function DriverProfileScreen() {
 
         <View style={styles.sectionHeadingWrap}>
           <Text style={styles.sectionHeading}>Driver Tools</Text>
-          <Text style={styles.sectionSubheading}>Manage your profile, vehicle, documents, and security</Text>
+          <Text style={styles.sectionSubheading}>Manage your profile, documents, and security</Text>
         </View>
 
         {profileSections.map((section) => (
