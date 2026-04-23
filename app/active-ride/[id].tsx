@@ -174,7 +174,7 @@ export default function ActiveRideScreen() {
       <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFillObject}
-        mapType="none"
+        mapType={Platform.OS === 'android' ? 'none' : 'standard'}
         initialRegion={{
           latitude: pickup.latitude || 6.9271,
           longitude: pickup.longitude || 79.8612,

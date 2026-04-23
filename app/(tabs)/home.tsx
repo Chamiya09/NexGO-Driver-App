@@ -195,7 +195,7 @@ export default function DriverHomeScreen() {
         <MapView
           ref={mapRef}
           style={StyleSheet.absoluteFillObject}
-          mapType="none"
+          mapType={Platform.OS === 'android' ? 'none' : 'standard'}
           showsUserLocation={false}
           showsMyLocationButton={false}
           initialRegion={{
