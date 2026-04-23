@@ -94,6 +94,18 @@ export function DriverAuthProvider({ children }: { children: React.ReactNode }) 
     setDriverToken(nextToken);
   };
 
+  const getRequestErrorMessage = (error: unknown, fallbackMessage: string) => {
+    if (error instanceof Error) {
+      if (error.message === 'Network request failed' || error.message === 'Failed to fetch') {
+        return 'Unable to reach the driver API. Check EXPO_PUBLIC_API_URL in .env and make sure the backend is running on the same network.';
+      }
+
+      return error.message;
+    }
+
+    return fallbackMessage;
+  };
+
   const login = async ({ email, password }: LoginPayload) => {
     setLoading(true);
     try {
@@ -107,6 +119,8 @@ export function DriverAuthProvider({ children }: { children: React.ReactNode }) 
 
       const data = await parseApiResponse<AuthResponse>(response);
       persistAuth(data.token, data.driver);
+    } catch (error) {
+      throw new Error(getRequestErrorMessage(error, 'Login failed'));
     } finally {
       setLoading(false);
     }
@@ -125,6 +139,8 @@ export function DriverAuthProvider({ children }: { children: React.ReactNode }) 
 
       const data = await parseApiResponse<AuthResponse>(response);
       persistAuth(data.token, data.driver);
+    } catch (error) {
+      throw new Error(getRequestErrorMessage(error, 'Registration failed'));
     } finally {
       setLoading(false);
     }
