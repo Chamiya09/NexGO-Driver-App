@@ -19,8 +19,6 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5000/api';
 
 const teal = '#008080';
 
-const teal = '#008080';
-
 // ── Types ─────────────────────────────────────────────────────────────────────
 type RideStatus = 'Pending' | 'Accepted' | 'InProgress' | 'Completed' | 'Cancelled';
 
