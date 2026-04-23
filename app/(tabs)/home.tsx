@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useDriverAuth } from '@/context/driver-auth-context';
+import { useNotifications } from '@/context/notifications-context';
 import driverSocket from '@/lib/driverSocket';
 import {
   NotificationAlert,
@@ -24,22 +25,28 @@ import {
 
 const teal = '#008080';
 
-// ── Driver location ───────────────────────────────────────────────────────────
-// Using a static Colombo position. Replace broadcastLocation() with
-// expo-location when real GPS is needed.
+// Static driver position — replace with expo-location for real GPS
 const DRIVER_COORDS = { latitude: 6.9271, longitude: 79.8612 };
 
+// ── Passenger marker pin ──────────────────────────────────────────────────────
+type PassengerPin = {
+  rideId: string;
+  passengerName: string;
+  latitude: number;
+  longitude: number;
+};
+
 export default function DriverHomeScreen() {
-  const { driver } = useDriverAuth();
-  const router    = useRouter();
-  const mapRef    = useRef<MapView>(null);
+  const { driver }         = useDriverAuth();
+  const router             = useRouter();
+  const { addNotification } = useNotifications();
+  const mapRef             = useRef<MapView>(null);
+  const alertRef           = useRef<NotificationAlertRef>(null);
 
-  const [isOnline, setIsOnline]       = useState(false);
-  const [socketOk, setSocketOk]       = useState(driverSocket.connected);
-  const isOnlineRef                   = useRef(false);
-
-  // Ref to the imperative NotificationAlert API
-  const alertRef = useRef<NotificationAlertRef>(null);
+  const [isOnline, setIsOnline]           = useState(false);
+  const [socketOk, setSocketOk]           = useState(driverSocket.connected);
+  const [passengerPins, setPassengerPins] = useState<PassengerPin[]>([]);
+  const isOnlineRef                       = useRef(false);
 
   // ── Socket connection status ─────────────────────────────────────────────
   useEffect(() => {
@@ -53,14 +60,11 @@ export default function DriverHomeScreen() {
     };
   }, []);
 
-  // ── Location broadcasting every 10 s ─────────────────────────────────────
+  // ── Location broadcast every 10 s ────────────────────────────────────────
   useEffect(() => {
     if (!driver?.id) return;
     const emit = () =>
-      driverSocket.emit('updateDriverLocation', {
-        driverId: driver.id,
-        ...DRIVER_COORDS,
-      });
+      driverSocket.emit('updateDriverLocation', { driverId: driver.id, ...DRIVER_COORDS });
     emit();
     const id = setInterval(emit, 10_000);
     return () => clearInterval(id);
@@ -71,24 +75,50 @@ export default function DriverHomeScreen() {
     const onIncomingRide = (rideData: RideNotificationData) => {
       console.log('[Driver] incomingRide received:', rideData);
 
-      // Always log it; only show alert when Online
+      const distanceKm = haversineKm(
+        DRIVER_COORDS.latitude,   DRIVER_COORDS.longitude,
+        rideData.pickup.latitude, rideData.pickup.longitude,
+      );
+
+      // Always save to the global notifications list
+      addNotification({
+        rideId:        rideData.rideId,
+        passengerId:   rideData.passengerId,
+        passengerName: rideData.passengerName,
+        vehicleType:   rideData.vehicleType,
+        price:         rideData.price,
+        pickup:        rideData.pickup,
+        dropoff:       rideData.dropoff,
+        distanceKm,
+      });
+
+      // Show passenger pickup pin on the map
+      setPassengerPins((prev) => {
+        if (prev.some((p) => p.rideId === rideData.rideId)) return prev;
+        return [
+          ...prev,
+          {
+            rideId:        rideData.rideId,
+            passengerName: rideData.passengerName,
+            latitude:      rideData.pickup.latitude,
+            longitude:     rideData.pickup.longitude,
+          },
+        ];
+      });
+
+      // Show floating alert card only when driver is Online
       if (!isOnlineRef.current) {
         console.log('[Driver] Alert suppressed — driver is Offline');
         return;
       }
-
-      const distanceKm = haversineKm(
-        DRIVER_COORDS.latitude,  DRIVER_COORDS.longitude,
-        rideData.pickup.latitude, rideData.pickup.longitude,
-      );
       alertRef.current?.show({ ...rideData, distanceKm });
     };
 
     driverSocket.on('incomingRide', onIncomingRide);
     return () => { driverSocket.off('incomingRide', onIncomingRide); };
-  }, []); // runs once — alertRef and isOnlineRef are refs, no deps needed
+  }, [addNotification]);
 
-  // ── Online toggle ────────────────────────────────────────────────────────
+  // ── Online toggle ─────────────────────────────────────────────────────────
   const handleToggleOnline = (value: boolean) => {
     isOnlineRef.current = value;
     setIsOnline(value);
@@ -118,11 +148,10 @@ export default function DriverHomeScreen() {
 
   // ── Re-center map ────────────────────────────────────────────────────────
   const handleLocate = () => {
-    mapRef.current?.animateToRegion({
-      ...DRIVER_COORDS,
-      latitudeDelta:  0.018,
-      longitudeDelta: 0.018,
-    }, 600);
+    mapRef.current?.animateToRegion(
+      { ...DRIVER_COORDS, latitudeDelta: 0.018, longitudeDelta: 0.018 },
+      600
+    );
   };
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -130,7 +159,7 @@ export default function DriverHomeScreen() {
     <View style={styles.root}>
       <StatusBar style="dark" translucent backgroundColor="transparent" />
 
-      {/* ── REAL MapView (fills screen) ── */}
+      {/* ── Real MapView ── */}
       <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFillObject}
@@ -144,30 +173,59 @@ export default function DriverHomeScreen() {
           longitudeDelta: 0.025,
         }}>
 
-        {/* Driver position marker */}
+        {/* ── Driver position marker ── */}
         <Marker coordinate={DRIVER_COORDS} anchor={{ x: 0.5, y: 0.5 }}>
           <View style={styles.driverPin}>
             <Ionicons name="car-sport" size={18} color="#FFF" />
           </View>
         </Marker>
+
+        {/* ── Passenger pickup markers (one per incoming ride) ── */}
+        {passengerPins.map((pin) => (
+          <Marker
+            key={pin.rideId}
+            coordinate={{ latitude: pin.latitude, longitude: pin.longitude }}
+            anchor={{ x: 0.5, y: 1 }}
+            onPress={() =>
+              router.push({
+                pathname: '/ride-preview/[id]',
+                params: {
+                  id: pin.rideId,
+                  passengerName: pin.passengerName,
+                  drLat: String(DRIVER_COORDS.latitude),
+                  drLng: String(DRIVER_COORDS.longitude),
+                },
+              })
+            }>
+            {/* Custom passenger pin */}
+            <View style={styles.passengerPinWrap}>
+              <View style={styles.passengerPin}>
+                <Ionicons name="person" size={14} color="#FFF" />
+              </View>
+              <View style={styles.passengerPinLabel}>
+                <Text style={styles.passengerPinText} numberOfLines={1}>
+                  {pin.passengerName.split(' ')[0]}
+                </Text>
+              </View>
+              <View style={styles.passengerPinPointer} />
+            </View>
+          </Marker>
+        ))}
       </MapView>
 
       {/*
-        ── IMPORTANT: NotificationAlert MUST be a sibling of MapView at root
-           level, NOT inside SafeAreaView.  Placing it in SafeAreaView causes
-           the absolute positioning to be clipped / offset incorrectly.
+        NotificationAlert MUST be at the root View level (not inside SafeAreaView)
+        so its position:absolute uses the full screen coordinate space.
       */}
       <NotificationAlert ref={alertRef} onPress={handleAlertPress} timeout={25_000} />
 
-      {/* ── UI overlay (SafeAreaView for padding) ── */}
+      {/* ── UI overlay ── */}
       <SafeAreaView style={styles.overlay} edges={['top']}>
-
         {/* Top bar */}
         <View style={styles.topBar}>
           <View style={styles.topBarLeft}>
             <Text style={styles.greeting}>NexGO Driver</Text>
             <View style={styles.subRow}>
-              {/* Socket connected indicator */}
               <View style={[styles.connDot, socketOk ? styles.connDotOn : styles.connDotOff]} />
               <Text style={styles.subtext}>
                 {isOnline ? 'Online — ready for rides' : 'Go online to receive requests'}
@@ -188,20 +246,25 @@ export default function DriverHomeScreen() {
             />
           </View>
         </View>
+
+        {/* Passenger pins count chip (when there are pending requests) */}
+        {passengerPins.length > 0 && (
+          <View style={styles.pinCountChip}>
+            <View style={styles.pinCountDot} />
+            <Text style={styles.pinCountText}>
+              {passengerPins.length} passenger{passengerPins.length > 1 ? 's' : ''} nearby
+            </Text>
+          </View>
+        )}
       </SafeAreaView>
 
       {/* Re-center button */}
-      <Pressable
-        style={[styles.locateBtn, { bottom: 220 }]}
-        onPress={handleLocate}>
+      <Pressable style={styles.locateBtn} onPress={handleLocate}>
         <Ionicons name="locate-outline" size={22} color={teal} />
       </Pressable>
 
       {/* Bottom summary card */}
-      <View style={[
-        styles.bottomCard,
-        { paddingBottom: Platform.OS === 'ios' ? 28 : 16 },
-      ]}>
+      <View style={[styles.bottomCard, { paddingBottom: Platform.OS === 'ios' ? 28 : 16 }]}>
         <View style={styles.handleRow}><View style={styles.handle} /></View>
 
         <View style={styles.cardHeader}>
@@ -216,29 +279,26 @@ export default function DriverHomeScreen() {
         </View>
 
         <View style={styles.metricRow}>
-          <View style={styles.metricTile}>
-            <View style={styles.metricIcon}>
-              <Ionicons name="cash-outline" size={18} color={teal} />
-            </View>
-            <Text style={styles.metricValue}>LKR 8,420</Text>
-            <Text style={styles.metricLabel}>Today's Earnings</Text>
-          </View>
-          <View style={styles.metricTile}>
-            <View style={styles.metricIcon}>
-              <Ionicons name="checkmark-done-outline" size={18} color={teal} />
-            </View>
-            <Text style={styles.metricValue}>12</Text>
-            <Text style={styles.metricLabel}>Rides Completed</Text>
-          </View>
-          <View style={styles.metricTile}>
-            <View style={styles.metricIcon}>
-              <Ionicons name="star-outline" size={18} color={teal} />
-            </View>
-            <Text style={styles.metricValue}>4.9</Text>
-            <Text style={styles.metricLabel}>Rating</Text>
-          </View>
+          <MetricTile icon="cash-outline" value="LKR 8,420" label="Earnings" />
+          <MetricTile icon="checkmark-done-outline" value="12" label="Rides Done" />
+          <MetricTile icon="star-outline" value="4.9" label="Rating" />
         </View>
       </View>
+    </View>
+  );
+}
+
+// ── Sub-component ─────────────────────────────────────────────────────────────
+function MetricTile({ icon, value, label }: {
+  icon: string; value: string; label: string;
+}) {
+  return (
+    <View style={styles.metricTile}>
+      <View style={styles.metricIcon}>
+        <Ionicons name={icon as any} size={18} color={teal} />
+      </View>
+      <Text style={styles.metricValue}>{value}</Text>
+      <Text style={styles.metricLabel}>{label}</Text>
     </View>
   );
 }
@@ -249,7 +309,7 @@ const STATUS_BAR_H = Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 2
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#EAE6DF' },
 
-  // ── Map driver pin
+  // ── Driver map pin
   driverPin: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: teal,
@@ -259,12 +319,36 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2, shadowRadius: 8, elevation: 6,
   },
 
-  // ── UI overlay
-  overlay: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0,
-    // No bottom — let it just wrap the top bar
+  // ── Passenger pickup pins
+  passengerPinWrap: { alignItems: 'center' },
+  passengerPin: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#27AE60',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2.5, borderColor: '#FFFFFF',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2, shadowRadius: 6, elevation: 5,
   },
+  passengerPinLabel: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    paddingHorizontal: 6, paddingVertical: 2,
+    marginTop: 2,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1, shadowRadius: 4, elevation: 2,
+  },
+  passengerPinText: { fontSize: 10, fontWeight: '900', color: '#102A28' },
+  passengerPinPointer: {
+    width: 0, height: 0,
+    borderStyle: 'solid',
+    borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 7,
+    borderLeftColor: 'transparent', borderRightColor: 'transparent',
+    borderTopColor: '#FFFFFF',
+    marginTop: -1,
+  },
+
+  // ── Overlay
+  overlay: { position: 'absolute', top: 0, left: 0, right: 0 },
 
   // ── Top bar
   topBar: {
@@ -274,36 +358,44 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderWidth: 1, borderColor: '#D9E9E6',
     padding: 13,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', gap: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.1, shadowRadius: 14, elevation: 5,
   },
   topBarLeft: { flex: 1 },
-  greeting:  { fontSize: 19, fontWeight: '800', color: '#102A28', marginBottom: 4 },
-  subRow:    { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  connDot:   { width: 7, height: 7, borderRadius: 4 },
-  connDotOn: { backgroundColor: '#27AE60' },
-  connDotOff:{ backgroundColor: '#D97706' },
-  subtext:   { fontSize: 12, fontWeight: '600', color: '#617C79' },
-
+  greeting:   { fontSize: 19, fontWeight: '800', color: '#102A28', marginBottom: 4 },
+  subRow:     { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  connDot:    { width: 7, height: 7, borderRadius: 4 },
+  connDotOn:  { backgroundColor: '#27AE60' },
+  connDotOff: { backgroundColor: '#D97706' },
+  subtext:    { fontSize: 12, fontWeight: '600', color: '#617C79' },
   statusPill: {
     flexDirection: 'row', alignItems: 'center',
     paddingLeft: 10, paddingRight: 3, paddingVertical: 3,
     borderRadius: 16, gap: 4,
   },
-  pillOnline:  { backgroundColor: '#E9F8EF' },
-  pillOffline: { backgroundColor: '#F0F5F4' },
+  pillOnline:     { backgroundColor: '#E9F8EF' },
+  pillOffline:    { backgroundColor: '#F0F5F4' },
   statusLabel:    { fontSize: 12, fontWeight: '900' },
   statusLabelOn:  { color: '#178A4F' },
   statusLabelOff: { color: '#617C79' },
 
+  // Passenger count chip
+  pinCountChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 7,
+    alignSelf: 'flex-start',
+    marginLeft: 14, marginTop: 8,
+    backgroundColor: '#E9F8EF',
+    borderRadius: 12, borderWidth: 1, borderColor: '#BBE8CC',
+    paddingHorizontal: 10, paddingVertical: 6,
+  },
+  pinCountDot:  { width: 8, height: 8, borderRadius: 4, backgroundColor: '#27AE60' },
+  pinCountText: { fontSize: 12, fontWeight: '800', color: '#178A4F' },
+
   // ── Locate button
   locateBtn: {
-    position: 'absolute', right: 14,
+    position: 'absolute', right: 14, bottom: 220,
     width: 46, height: 46, borderRadius: 23,
     backgroundColor: '#FFFFFF',
     alignItems: 'center', justifyContent: 'center',
@@ -339,7 +431,7 @@ const styles = StyleSheet.create({
   liveDot:   { width: 8, height: 8, borderRadius: 4, backgroundColor: '#A0B3B2' },
   liveDotOn: { backgroundColor: '#27AE60' },
   liveBadgeText: { fontSize: 12, fontWeight: '800', color: '#617C79' },
-  metricRow: { flexDirection: 'row', gap: 10 },
+  metricRow:  { flexDirection: 'row', gap: 10 },
   metricTile: {
     flex: 1, backgroundColor: '#F7FBFA',
     borderRadius: 14, borderWidth: 1, borderColor: '#D9E9E6', padding: 12,
