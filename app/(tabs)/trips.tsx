@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Platform,
   Pressable,
@@ -8,42 +8,91 @@ import {
   StyleSheet,
   Text,
   View,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import { useDriverAuth } from '@/context/driver-auth-context';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5000/api';
 
 const teal = '#008080';
 
-const upcomingTrips = [
-  {
-    id: 'airport-ride',
-    time: '04:30 PM',
-    pickup: 'Colombo Fort Station',
-    dropoff: 'Bandaranaike Airport',
-    fare: 'LKR 4,850',
-    distance: '28.4 km',
-  },
-  {
-    id: 'hospital-ride',
-    time: '06:15 PM',
-    pickup: 'Nugegoda Junction',
-    dropoff: 'Asiri Central Hospital',
-    fare: 'LKR 1,620',
-    distance: '8.2 km',
-  },
-];
+const teal = '#008080';
 
-const recentTrips = [
-  { id: 'r1', route: 'Kollupitiya to Bambalapitiya', fare: 'LKR 780', status: 'Completed' },
-  { id: 'r2', route: 'Rajagiriya to Borella', fare: 'LKR 940', status: 'Completed' },
-  { id: 'r3', route: 'Wellawatte to Dehiwala', fare: 'LKR 690', status: 'Completed' },
-];
+// ── Types ─────────────────────────────────────────────────────────────────────
+type RideStatus = 'Pending' | 'Accepted' | 'InProgress' | 'Completed' | 'Cancelled';
+
+type Coords = { latitude: number; longitude: number; name?: string };
+
+type Ride = {
+  id: string;
+  pickup: Coords;
+  dropoff: Coords;
+  vehicleType: string;
+  price: number;
+  status: RideStatus;
+  requestedAt: string;
+};
+
+// ── Utility: format date ──────────────────────────────────────────────────────
+const formatTime = (iso: string): string => {
+  const d = new Date(iso);
+  return d.toLocaleTimeString('en-LK', { hour: '2-digit', minute: '2-digit' });
+};
+
+const shortenLoc = (name?: string, lat?: number, lng?: number): string => {
+  if (name && name.trim()) return name.length > 25 ? name.substring(0, 23) + '…' : name;
+  if (lat !== undefined && lng !== undefined) return `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
+  return 'Unknown location';
+};
 
 export default function DriverTripsScreen() {
+  const { driver, token } = useDriverAuth();
+  
+  const [rides, setRides] = useState<Ride[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchRides = useCallback(async (isRefresh = false) => {
+    if (!token) return;
+    isRefresh ? setRefreshing(true) : setLoading(true);
+
+    try {
+      const res = await fetch(`${API_URL}/rides/driver-rides`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) setRides(data.rides ?? []);
+    } catch (err) {
+      console.error('[Trips] fetch error:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    fetchRides();
+  }, [fetchRides]);
+
+  // Aggregate stats
+  const upcomingTrips = rides.filter((r) => r.status === 'Accepted' || r.status === 'InProgress');
+  const recentTrips = rides.filter((r) => r.status === 'Completed' || r.status === 'Cancelled');
+  
+  const activeRide = upcomingTrips.find((r) => r.status === 'InProgress');
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        contentContainerStyle={styles.container} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => fetchRides(true)} tintColor={teal} colors={[teal]} />
+        }
+      >
         <View style={styles.header}>
           <Text style={styles.eyebrow}>TRIPS</Text>
           <Text style={styles.title}>Ride activity</Text>
@@ -52,24 +101,28 @@ export default function DriverTripsScreen() {
 
         <View style={styles.statusCard}>
           <View style={styles.statusIconWrap}>
-            <Ionicons name="radio-outline" size={24} color="#FFFFFF" />
+            <Ionicons name={activeRide ? "car-sport" : "radio-outline"} size={24} color="#FFFFFF" />
           </View>
           <View style={styles.statusTextWrap}>
-            <Text style={styles.statusTitle}>No active ride</Text>
-            <Text style={styles.statusSubtitle}>Go online from Home to start receiving nearby requests.</Text>
+            <Text style={styles.statusTitle}>{activeRide ? "Ride in progress" : "No active ride"}</Text>
+            <Text style={styles.statusSubtitle}>
+              {activeRide 
+                ? `Currently heading to ${shortenLoc(activeRide.dropoff.name, activeRide.dropoff.latitude, activeRide.dropoff.longitude)}`
+                : "Go online from Home to start receiving nearby requests."}
+            </Text>
           </View>
         </View>
 
         <View style={styles.summaryRow}>
           <View style={styles.summaryCard}>
             <Ionicons name="calendar-outline" size={18} color={teal} />
-            <Text style={styles.summaryValue}>2</Text>
+            <Text style={styles.summaryValue}>{upcomingTrips.length}</Text>
             <Text style={styles.summaryLabel}>Upcoming</Text>
           </View>
           <View style={styles.summaryCard}>
             <Ionicons name="checkmark-done-outline" size={18} color={teal} />
-            <Text style={styles.summaryValue}>12</Text>
-            <Text style={styles.summaryLabel}>Today</Text>
+            <Text style={styles.summaryValue}>{recentTrips.length}</Text>
+            <Text style={styles.summaryLabel}>Completed</Text>
           </View>
           <View style={styles.summaryCard}>
             <Ionicons name="time-outline" size={18} color={teal} />
@@ -83,28 +136,31 @@ export default function DriverTripsScreen() {
           <Text style={styles.sectionSubheading}>Scheduled pickups and accepted ride queue</Text>
         </View>
 
-        {upcomingTrips.map((trip) => (
+        {loading && rides.length === 0 ? (
+           <ActivityIndicator size="large" color={teal} style={{ marginTop: 20 }} />
+        ) : upcomingTrips.length === 0 ? (
+           <Text style={{ textAlign: 'center', color: '#888', marginVertical: 10 }}>No upcoming trips.</Text>
+        ) : upcomingTrips.map((trip) => (
           <View key={trip.id} style={styles.tripCard}>
             <View style={styles.tripHeader}>
               <View style={styles.timePill}>
                 <Ionicons name="time-outline" size={14} color={teal} />
-                <Text style={styles.timePillText}>{trip.time}</Text>
+                <Text style={styles.timePillText}>{formatTime(trip.requestedAt)}</Text>
               </View>
-              <Text style={styles.tripFare}>{trip.fare}</Text>
+              <Text style={styles.tripFare}>LKR {trip.price.toLocaleString()}</Text>
             </View>
 
             <View style={styles.routeBlock}>
-              <RoutePoint icon="radio-button-on" label="Pickup" value={trip.pickup} />
+              <RoutePoint icon="radio-button-on" label="Pickup" value={shortenLoc(trip.pickup.name, trip.pickup.latitude, trip.pickup.longitude)} />
               <View style={styles.routeDivider} />
-              <RoutePoint icon="location" label="Drop-off" value={trip.dropoff} />
+              <RoutePoint icon="location" label="Drop-off" value={shortenLoc(trip.dropoff.name, trip.dropoff.latitude, trip.dropoff.longitude)} />
             </View>
 
             <View style={styles.tripFooter}>
-              <Text style={styles.distanceText}>{trip.distance}</Text>
-              <Pressable style={styles.detailButton}>
-                <Text style={styles.detailButtonText}>View Details</Text>
-                <Ionicons name="chevron-forward" size={15} color={teal} />
-              </Pressable>
+              <Text style={styles.distanceText}>{trip.vehicleType}</Text>
+              <View style={styles.detailButton}>
+                <Text style={styles.detailButtonText}>{trip.status}</Text>
+              </View>
             </View>
           </View>
         ))}
@@ -114,23 +170,29 @@ export default function DriverTripsScreen() {
           <Text style={styles.sectionSubheading}>Completed ride history for quick review</Text>
         </View>
 
-        <View style={styles.recentCard}>
-          {recentTrips.map((trip, index) => (
-            <View key={trip.id}>
-              {index > 0 ? <View style={styles.inlineDivider} /> : null}
-              <View style={styles.recentRow}>
-                <View style={styles.recentIconWrap}>
-                  <Ionicons name="car-outline" size={17} color={teal} />
+        {recentTrips.length === 0 ? (
+            <Text style={{ textAlign: 'center', color: '#888', marginVertical: 10 }}>No recent trips.</Text>
+        ) : (
+          <View style={styles.recentCard}>
+            {recentTrips.map((trip, index) => {
+              const route = `${shortenLoc(trip.pickup.name, trip.pickup.latitude, trip.pickup.longitude)} to ${shortenLoc(trip.dropoff.name, trip.dropoff.latitude, trip.dropoff.longitude)}`;
+              return (
+              <View key={trip.id}>
+                {index > 0 ? <View style={styles.inlineDivider} /> : null}
+                <View style={styles.recentRow}>
+                  <View style={styles.recentIconWrap}>
+                    <Ionicons name={trip.status === 'Cancelled' ? "close-circle-outline" : "car-outline"} size={17} color={trip.status === 'Cancelled' ? '#DC2626' : teal} />
+                  </View>
+                  <View style={styles.recentTextWrap}>
+                    <Text style={styles.recentRoute} numberOfLines={1}>{route}</Text>
+                    <Text style={[styles.recentStatus, trip.status === 'Cancelled' && { color: '#DC2626' }]}>{trip.status}</Text>
+                  </View>
+                  <Text style={styles.recentFare}>LKR {trip.price.toLocaleString()}</Text>
                 </View>
-                <View style={styles.recentTextWrap}>
-                  <Text style={styles.recentRoute}>{trip.route}</Text>
-                  <Text style={styles.recentStatus}>{trip.status}</Text>
-                </View>
-                <Text style={styles.recentFare}>{trip.fare}</Text>
               </View>
-            </View>
-          ))}
-        </View>
+            )})}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
