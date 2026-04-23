@@ -46,6 +46,12 @@ type UpdateProfilePayload = {
   profileImageUrl?: string;
 };
 
+type ChangePasswordPayload = {
+  currentPassword: string;
+  newPassword: string;
+  confirmNewPassword: string;
+};
+
 type AuthResponse = {
   token: string;
   driver: DriverProfile;
@@ -62,6 +68,7 @@ type DriverAuthContextValue = {
   login: (payload: LoginPayload) => Promise<void>;
   register: (payload: RegisterPayload) => Promise<void>;
   updateProfile: (payload: UpdateProfilePayload) => Promise<void>;
+  changePassword: (payload: ChangePasswordPayload) => Promise<void>;
   updateDocument: (documentType: DriverDocument['documentType'], fileUrl: string) => Promise<void>;
   updateSecurity: (twoStepVerificationEnabled: boolean) => Promise<void>;
   logout: () => void;
@@ -155,6 +162,29 @@ export function DriverAuthProvider({ children }: { children: React.ReactNode }) 
     setDriver(data.driver);
   };
 
+  const changePassword = async ({ currentPassword, newPassword, confirmNewPassword }: ChangePasswordPayload) => {
+    const nextToken = requireToken();
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/driver-auth/me/password`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${nextToken}`,
+        },
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+          confirmNewPassword,
+        }),
+      });
+
+      await parseApiResponse<{ message: string }>(response);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const updateDocument = async (documentType: DriverDocument['documentType'], fileUrl: string) => {
     const nextToken = requireToken();
     const response = await fetch(`${API_BASE_URL}/driver-auth/me/documents/${documentType}`, {
@@ -199,6 +229,7 @@ export function DriverAuthProvider({ children }: { children: React.ReactNode }) 
       login,
       register,
       updateProfile,
+      changePassword,
       updateDocument,
       updateSecurity,
       logout,

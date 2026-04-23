@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
+  KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   SafeAreaView,
@@ -9,6 +11,7 @@ import {
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -20,16 +23,92 @@ import { useDriverAuth } from '@/context/driver-auth-context';
 const teal = '#008080';
 
 export default function DriverSecurityScreen() {
-  const { driver, updateSecurity } = useDriverAuth();
+  const { driver, loading, changePassword, updateSecurity } = useDriverAuth();
   const [twoStepEnabled, setTwoStepEnabled] = useState(driver?.security?.twoStepVerificationEnabled ?? true);
-
-  const showPlaceholder = (title: string) => {
-    Alert.alert(title, 'This is a placeholder action for the driver security flow.');
-  };
+  const [isPasswordModalVisible, setIsPasswordModalVisible] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmNewPassword: '',
+  });
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setTwoStepEnabled(driver?.security?.twoStepVerificationEnabled ?? true);
   }, [driver?.security?.twoStepVerificationEnabled]);
+
+  const handleChange = (field: keyof typeof passwordForm, value: string) => {
+    setPasswordForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
+
+  const openPasswordModal = () => {
+    setPasswordForm({
+      currentPassword: '',
+      newPassword: '',
+      confirmNewPassword: '',
+    });
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setIsPasswordModalVisible(true);
+  };
+
+  const closePasswordModal = () => {
+    if (loading) {
+      return;
+    }
+
+    setIsPasswordModalVisible(false);
+  };
+
+  const validatePasswordForm = () => {
+    if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmNewPassword) {
+      return 'Please fill in all password fields.';
+    }
+
+    if (passwordForm.newPassword.length < 6) {
+      return 'New password must be at least 6 characters long.';
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmNewPassword) {
+      return 'New password and confirmation do not match.';
+    }
+
+    if (passwordForm.currentPassword === passwordForm.newPassword) {
+      return 'Choose a new password that is different from the current one.';
+    }
+
+    return null;
+  };
+
+  const submitPasswordChange = async () => {
+    const validationError = validatePasswordForm();
+    if (validationError) {
+      setErrorMessage(validationError);
+      setSuccessMessage(null);
+      return;
+    }
+
+    try {
+      setErrorMessage(null);
+      setSuccessMessage(null);
+
+      await changePassword(passwordForm);
+
+      setIsPasswordModalVisible(false);
+      setPasswordForm({
+        currentPassword: '',
+        newPassword: '',
+        confirmNewPassword: '',
+      });
+      setSuccessMessage('Password updated successfully.');
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to update password.');
+    }
+  };
 
   const updateTwoStepVerification = async (nextValue: boolean) => {
     const previousValue = twoStepEnabled;
@@ -78,12 +157,15 @@ export default function DriverSecurityScreen() {
 
         <Text style={styles.sectionTitle}>ACCOUNT PROTECTION</Text>
 
+        {errorMessage && !isPasswordModalVisible ? <Text style={styles.pageFeedbackError}>{errorMessage}</Text> : null}
+        {successMessage ? <Text style={styles.pageFeedbackSuccess}>{successMessage}</Text> : null}
+
         <View style={styles.groupCard}>
           <SecurityActionRow
             icon="key-outline"
             title="Change password"
             subtitle="Update your sign-in password regularly"
-            onPress={() => showPlaceholder('Change password')}
+            onPress={openPasswordModal}
           />
           <InlineDivider />
           <SecuritySwitchRow
@@ -97,6 +179,93 @@ export default function DriverSecurityScreen() {
           />
         </View>
       </ScrollView>
+
+      <Modal visible={isPasswordModalVisible} transparent animationType="fade" onRequestClose={closePasswordModal}>
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            style={styles.modalKeyboardWrap}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <ScrollView
+              contentContainerStyle={styles.modalScrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}>
+              <View style={styles.modalCard}>
+                <View style={styles.modalHeader}>
+                  <View>
+                    <Text style={styles.modalTitle}>Change Password</Text>
+                    <Text style={styles.modalSubtitle}>
+                      Confirm your current password and set a new one for your driver account.
+                    </Text>
+                  </View>
+
+                  <Pressable style={styles.closeButton} onPress={closePasswordModal} disabled={loading}>
+                    <Ionicons name="close" size={20} color="#102A28" />
+                  </Pressable>
+                </View>
+
+                {errorMessage ? <Text style={styles.modalFeedback}>{errorMessage}</Text> : null}
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Current password</Text>
+                  <TextInput
+                    value={passwordForm.currentPassword}
+                    onChangeText={(value) => handleChange('currentPassword', value)}
+                    placeholder="Enter current password"
+                    placeholderTextColor="#93A5A2"
+                    secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={styles.input}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>New password</Text>
+                  <TextInput
+                    value={passwordForm.newPassword}
+                    onChangeText={(value) => handleChange('newPassword', value)}
+                    placeholder="Enter new password"
+                    placeholderTextColor="#93A5A2"
+                    secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={styles.input}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Confirm new password</Text>
+                  <TextInput
+                    value={passwordForm.confirmNewPassword}
+                    onChangeText={(value) => handleChange('confirmNewPassword', value)}
+                    placeholder="Confirm new password"
+                    placeholderTextColor="#93A5A2"
+                    secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={styles.input}
+                  />
+                </View>
+
+                <View style={styles.modalActions}>
+                  <Pressable style={styles.secondaryButton} onPress={closePasswordModal} disabled={loading}>
+                    <Text style={styles.secondaryButtonText}>Cancel</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={[styles.primaryButton, loading ? styles.buttonDisabled : null]}
+                    onPress={() => {
+                      void submitPasswordChange();
+                    }}
+                    disabled={loading}>
+                    <Text style={styles.primaryButtonText}>{loading ? 'Updating...' : 'Update Password'}</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -265,6 +434,18 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: '500',
   },
+  pageFeedbackError: {
+    color: '#C13B3B',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  pageFeedbackSuccess: {
+    color: '#157A62',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
   sectionTitle: {
     color: '#617C79',
     fontSize: 11,
@@ -322,5 +503,112 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#D9E9E6',
     marginVertical: 10,
+  },
+  modalOverlay: {
+    flex: 1,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(7, 21, 19, 0.45)',
+  },
+  modalKeyboardWrap: {
+    width: '100%',
+  },
+  modalScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  modalCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#FFFFFF',
+    padding: 14,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 12,
+  },
+  modalTitle: {
+    color: '#102A28',
+    fontSize: 17,
+    fontWeight: '800',
+    marginBottom: 3,
+  },
+  modalSubtitle: {
+    color: '#617C79',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '500',
+    maxWidth: 230,
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalFeedback: {
+    color: '#C13B3B',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  inputGroup: {
+    marginBottom: 10,
+  },
+  inputLabel: {
+    color: '#617C79',
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    borderRadius: 12,
+    backgroundColor: '#F7FBFA',
+    color: '#102A28',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 2,
+  },
+  secondaryButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryButtonText: {
+    color: '#102A28',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  primaryButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 12,
+    backgroundColor: teal,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
 });
