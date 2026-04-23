@@ -14,6 +14,9 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import { API_BASE_URL, parseApiResponse } from '@/lib/api';
+import { getDriverToken } from '@/lib/driver-session';
+
 const teal = '#008080';
 
 type DocumentStatus = 'approved' | 'review' | 'missing';
@@ -81,19 +84,42 @@ export default function DriverDocumentUploadsScreen() {
   const requiredCount = documents.length;
   const completeCount = documents.filter((document) => document.status === 'approved').length;
 
-  const handleUpload = (documentId: string) => {
-    setDocuments((current) =>
-      current.map((document) =>
-        document.id === documentId
-          ? {
-              ...document,
-              status: 'review',
-              updatedAt: 'Submitted just now',
-            }
-          : document
-      )
-    );
-    Alert.alert('Document submitted', 'This placeholder marks the document as submitted for review.');
+  const handleUpload = async (documentId: string) => {
+    const token = getDriverToken();
+    if (!token) {
+      Alert.alert('Sign in required', 'Please sign in again to upload driver documents.');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/driver-auth/me/documents/${documentId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          fileUrl: `mock://${documentId}-${Date.now()}`,
+        }),
+      });
+
+      await parseApiResponse<{ driver: unknown }>(response);
+      setDocuments((current) =>
+        current.map((document) =>
+          document.id === documentId
+            ? {
+                ...document,
+                status: 'review',
+                updatedAt: 'Submitted just now',
+              }
+            : document
+        )
+      );
+      Alert.alert('Document submitted', 'This document has been saved and submitted for review.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to submit document.';
+      Alert.alert('Upload failed', message);
+    }
   };
 
   return (

@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Alert,
   Platform,
   Pressable,
   SafeAreaView,
@@ -12,6 +13,8 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+
+import { clearDriverToken } from '@/lib/driver-session';
 
 const teal = '#008080';
 
@@ -58,6 +61,20 @@ const profileMetrics = [
 ];
 
 export default function DriverProfileScreen() {
+  const confirmLogout = () => {
+    Alert.alert('Log out', 'Do you want to sign out of this driver device?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Log out',
+        style: 'destructive',
+        onPress: () => {
+          clearDriverToken();
+          router.replace('/login');
+        },
+      },
+    ]);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
@@ -123,7 +140,7 @@ export default function DriverProfileScreen() {
           </Pressable>
         ))}
 
-        <Pressable style={[styles.settingRow, styles.logoutRow]}>
+        <Pressable style={[styles.settingRow, styles.logoutRow]} onPress={confirmLogout}>
           <View style={styles.settingLeft}>
             <View style={styles.logoutIconWrap}>
               <Ionicons name="log-out-outline" size={20} color="#C13B3B" />

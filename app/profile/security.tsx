@@ -15,6 +15,9 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import { API_BASE_URL, parseApiResponse } from '@/lib/api';
+import { getDriverToken } from '@/lib/driver-session';
+
 const teal = '#008080';
 
 export default function DriverSecurityScreen() {
@@ -22,6 +25,37 @@ export default function DriverSecurityScreen() {
 
   const showPlaceholder = (title: string) => {
     Alert.alert(title, 'This is a placeholder action for the driver security flow.');
+  };
+
+  const updateTwoStepVerification = async (nextValue: boolean) => {
+    const previousValue = twoStepEnabled;
+    setTwoStepEnabled(nextValue);
+
+    const token = getDriverToken();
+    if (!token) {
+      setTwoStepEnabled(previousValue);
+      Alert.alert('Sign in required', 'Please sign in again to update security settings.');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/driver-auth/me/security`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          twoStepVerificationEnabled: nextValue,
+        }),
+      });
+
+      await parseApiResponse<{ driver: unknown }>(response);
+    } catch (error) {
+      setTwoStepEnabled(previousValue);
+      const message = error instanceof Error ? error.message : 'Unable to update security settings.';
+      Alert.alert('Update failed', message);
+    }
   };
 
   return (
@@ -71,7 +105,9 @@ export default function DriverSecurityScreen() {
             title="Two-step verification"
             subtitle="Require an OTP when signing in"
             value={twoStepEnabled}
-            onValueChange={setTwoStepEnabled}
+            onValueChange={(nextValue) => {
+              void updateTwoStepVerification(nextValue);
+            }}
           />
         </View>
       </ScrollView>

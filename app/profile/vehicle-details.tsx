@@ -17,6 +17,9 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import { API_BASE_URL, parseApiResponse } from '@/lib/api';
+import { getDriverToken } from '@/lib/driver-session';
+
 const teal = '#008080';
 
 const initialVehicleDetails = {
@@ -55,7 +58,7 @@ export default function DriverVehicleDetailsScreen() {
     }));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const nextDetails = {
       licensePlate: form.licensePlate.trim().toUpperCase(),
       carModel: form.carModel.trim(),
@@ -75,9 +78,29 @@ export default function DriverVehicleDetailsScreen() {
       return;
     }
 
-    setDetails(nextDetails);
-    setIsEditModalVisible(false);
-    setSuccessMessage('Vehicle details updated.');
+    const token = getDriverToken();
+    if (!token) {
+      setErrorMessage('Please sign in again to update vehicle details.');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/driver-auth/me/vehicle`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(nextDetails),
+      });
+
+      await parseApiResponse<{ driver: unknown }>(response);
+      setDetails(nextDetails);
+      setIsEditModalVisible(false);
+      setSuccessMessage('Vehicle details updated.');
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to update vehicle details.');
+    }
   };
 
   const confirmRemoveVehicle = () => {

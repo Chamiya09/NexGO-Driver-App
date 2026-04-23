@@ -17,6 +17,9 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import { API_BASE_URL, parseApiResponse } from '@/lib/api';
+import { getDriverToken } from '@/lib/driver-session';
+
 const teal = '#008080';
 
 const initialDriverDetails = {
@@ -60,7 +63,7 @@ export default function DriverPersonalDetailsScreen() {
     }));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const fullName = form.fullName.trim();
     const email = form.email.trim();
     const phoneNumber = form.phoneNumber.trim();
@@ -76,14 +79,39 @@ export default function DriverPersonalDetailsScreen() {
       return;
     }
 
-    setDetails({
-      fullName,
-      email: email.toLowerCase(),
-      phoneNumber,
-      emergencyContact,
-    });
-    setIsEditModalVisible(false);
-    setSuccessMessage('Driver personal details updated.');
+    const token = getDriverToken();
+    if (!token) {
+      setErrorMessage('Please sign in again to update your driver profile.');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/driver-auth/me`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          fullName,
+          email: email.toLowerCase(),
+          phoneNumber,
+          emergencyContact,
+        }),
+      });
+
+      await parseApiResponse<{ driver: unknown }>(response);
+      setDetails({
+        fullName,
+        email: email.toLowerCase(),
+        phoneNumber,
+        emergencyContact,
+      });
+      setIsEditModalVisible(false);
+      setSuccessMessage('Driver personal details updated.');
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to update driver personal details.');
+    }
   };
 
   const confirmDeleteProfile = () => {

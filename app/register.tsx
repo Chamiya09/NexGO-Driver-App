@@ -4,28 +4,30 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import AuthShell from '@/components/auth/auth-shell';
+import { API_BASE_URL, parseApiResponse } from '@/lib/api';
 
 const teal = '#008080';
+
+type DriverAuthResponse = {
+  token: string;
+  driver: {
+    id: string;
+    fullName: string;
+    email: string;
+    phoneNumber: string;
+  };
+};
 
 export default function DriverRegisterScreen() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [licensePlate, setLicensePlate] = useState('');
-  const [carModel, setCarModel] = useState('');
   const [password, setPassword] = useState('');
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const onSubmit = () => {
-    if (
-      !fullName.trim() ||
-      !email.trim() ||
-      !phoneNumber.trim() ||
-      !licensePlate.trim() ||
-      !carModel.trim() ||
-      !password.trim()
-    ) {
+  const onSubmit = async () => {
+    if (!fullName.trim() || !email.trim() || !phoneNumber.trim() || !password.trim()) {
       Alert.alert('Missing details', 'Please complete all fields.');
       return;
     }
@@ -36,19 +38,37 @@ export default function DriverRegisterScreen() {
     }
 
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      const response = await fetch(`${API_BASE_URL}/driver-auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fullName: fullName.trim(),
+          email: email.trim(),
+          phoneNumber: phoneNumber.trim(),
+          password,
+        }),
+      });
+
+      await parseApiResponse<DriverAuthResponse>(response);
       Alert.alert('Account created', 'Your driver account has been created. Please sign in.', [
         { text: 'OK', onPress: () => router.replace('/login') },
       ]);
-    }, 350);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Registration failed';
+      Alert.alert('Registration failed', message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <AuthShell
       eyebrow="Start driving"
       title="Create your driver account"
-      subtitle="Set up NexGO Driver once and keep trips, earnings, vehicle details, and documents ready.">
+      subtitle="Set up NexGO Driver once and add your vehicle details from your profile after sign in.">
       <View style={styles.formStack}>
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Full name</Text>
@@ -95,36 +115,6 @@ export default function DriverRegisterScreen() {
               placeholder="07X XXX XXXX"
               keyboardType="phone-pad"
               textContentType="telephoneNumber"
-              placeholderTextColor="#93A5A2"
-            />
-          </View>
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>License plate</Text>
-          <View style={styles.inputRow}>
-            <Ionicons name="car-outline" size={20} color={teal} />
-            <TextInput
-              style={styles.input}
-              value={licensePlate}
-              onChangeText={setLicensePlate}
-              placeholder="ABC-4821"
-              autoCapitalize="characters"
-              placeholderTextColor="#93A5A2"
-            />
-          </View>
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Car model</Text>
-          <View style={styles.inputRow}>
-            <Ionicons name="car-sport-outline" size={20} color={teal} />
-            <TextInput
-              style={styles.input}
-              value={carModel}
-              onChangeText={setCarModel}
-              placeholder="Toyota Prius"
-              autoCapitalize="words"
               placeholderTextColor="#93A5A2"
             />
           </View>
