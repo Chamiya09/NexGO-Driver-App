@@ -22,38 +22,58 @@ import { useDriverAuth } from '@/context/driver-auth-context';
 const teal = '#008080';
 
 const initialVehicleDetails = {
-  licensePlate: 'ABC-4821',
-  carModel: 'Toyota Prius',
-  year: '2020',
-  color: 'Pearl White',
-  category: 'Comfort',
-  registrationNumber: 'WP-CAR-908212',
+  licensePlate: '',
+  carModel: '',
+  year: '',
+  color: '',
+  category: '',
+  registrationNumber: '',
 };
 
-type VehicleDetailsField = keyof typeof initialVehicleDetails;
+const vehicleTypeOptions = [
+  { label: 'Bike', value: 'Bike', icon: 'bicycle-outline' as const },
+  { label: 'Three Wheeler', value: 'Three Wheeler', icon: 'car-outline' as const },
+  { label: 'Car', value: 'Car', icon: 'car-sport-outline' as const },
+  { label: 'Van', value: 'Van', icon: 'bus-outline' as const },
+];
+
+type VehicleDetails = typeof initialVehicleDetails;
+type VehicleDetailsField = keyof VehicleDetails;
+
+function hasVehicleDetails(details: VehicleDetails) {
+  return Object.values(details).some((value) => value.trim().length > 0);
+}
 
 export default function DriverVehicleDetailsScreen() {
   const { driver, updateVehicle } = useDriverAuth();
-  const vehicleDetails = useMemo(() => ({
-    licensePlate: driver?.vehicle?.licensePlate || initialVehicleDetails.licensePlate,
-    carModel: driver?.vehicle?.carModel || initialVehicleDetails.carModel,
-    year: driver?.vehicle?.year || initialVehicleDetails.year,
-    color: driver?.vehicle?.color || initialVehicleDetails.color,
-    category: driver?.vehicle?.category || initialVehicleDetails.category,
-    registrationNumber: driver?.vehicle?.registrationNumber || initialVehicleDetails.registrationNumber,
-  }), [
-    driver?.vehicle?.carModel,
-    driver?.vehicle?.category,
-    driver?.vehicle?.color,
-    driver?.vehicle?.licensePlate,
-    driver?.vehicle?.registrationNumber,
-    driver?.vehicle?.year,
-  ]);
+  const vehicleDetails = useMemo(
+    () => ({
+      licensePlate: driver?.vehicle?.licensePlate || '',
+      carModel: driver?.vehicle?.carModel || '',
+      year: driver?.vehicle?.year || '',
+      color: driver?.vehicle?.color || '',
+      category: driver?.vehicle?.category || '',
+      registrationNumber: driver?.vehicle?.registrationNumber || '',
+    }),
+    [
+      driver?.vehicle?.carModel,
+      driver?.vehicle?.category,
+      driver?.vehicle?.color,
+      driver?.vehicle?.licensePlate,
+      driver?.vehicle?.registrationNumber,
+      driver?.vehicle?.year,
+    ]
+  );
+
   const [details, setDetails] = useState(vehicleDetails);
   const [form, setForm] = useState(vehicleDetails);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const hasVehicle = hasVehicleDetails(details);
+  const vehicleStatus = driver?.vehicle?.status || 'pending';
+  const selectedHeroVehicleType = vehicleTypeOptions.find((option) => option.value === details.category);
 
   useEffect(() => {
     setDetails(vehicleDetails);
@@ -68,6 +88,7 @@ export default function DriverVehicleDetailsScreen() {
   };
 
   const closeEditModal = () => {
+    setErrorMessage(null);
     setIsEditModalVisible(false);
   };
 
@@ -102,7 +123,7 @@ export default function DriverVehicleDetailsScreen() {
       await updateVehicle(nextDetails);
       setDetails(nextDetails);
       setIsEditModalVisible(false);
-      setSuccessMessage('Vehicle details updated.');
+      setSuccessMessage(hasVehicle ? 'Vehicle details updated.' : 'Vehicle added successfully.');
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to update vehicle details.');
     }
@@ -132,23 +153,29 @@ export default function DriverVehicleDetailsScreen() {
           <View style={styles.heroCard}>
             <View style={styles.heroTopRow}>
               <View style={styles.heroAvatar}>
-                <Ionicons name="car-sport" size={26} color={teal} />
+                <Ionicons name={selectedHeroVehicleType?.icon || 'car-sport-outline'} size={26} color={teal} />
               </View>
 
               <View style={styles.heroIdentity}>
-                <Text style={styles.heroName}>{details.carModel}</Text>
+                <Text style={styles.heroName}>{hasVehicle ? details.carModel : 'Add your first vehicle'}</Text>
                 <Text style={styles.heroSubline}>
-                  {details.licensePlate} • {details.year} • {details.category}
+                  {hasVehicle
+                    ? `${details.licensePlate} • ${details.year} • ${details.category}`
+                    : 'Complete your vehicle profile to start receiving rides with the correct riding vehicle type.'}
                 </Text>
               </View>
             </View>
 
             <View style={styles.heroBadge}>
-              <Ionicons name="checkmark-circle-outline" size={15} color={teal} />
-              <Text style={styles.heroBadgeText}>Vehicle approved</Text>
+              <Ionicons name={hasVehicle ? 'checkmark-circle-outline' : 'add-circle-outline'} size={15} color={teal} />
+              <Text style={styles.heroBadgeText}>{hasVehicle ? `Vehicle ${vehicleStatus}` : 'Vehicle not added'}</Text>
             </View>
 
-            <Text style={styles.heroHint}>Keep your vehicle information accurate so passengers can identify your ride.</Text>
+            <Text style={styles.heroHint}>
+              {hasVehicle
+                ? 'Keep your vehicle information accurate so passengers can identify your ride.'
+                : 'Add your driving vehicle, registration details, and ride type so your account is ready for verification.'}
+            </Text>
           </View>
 
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
@@ -159,44 +186,71 @@ export default function DriverVehicleDetailsScreen() {
           <View style={styles.groupCard}>
             <View style={styles.detailsHeader}>
               <View>
-                <Text style={styles.detailsTitle}>Registered vehicle</Text>
-                <Text style={styles.detailsHint}>Review your active NexGO driver vehicle details.</Text>
+                <Text style={styles.detailsTitle}>{hasVehicle ? 'Registered vehicle' : 'Add vehicle details'}</Text>
+                <Text style={styles.detailsHint}>
+                  {hasVehicle
+                    ? 'Review your active NexGO driver vehicle details.'
+                    : 'Create your driver vehicle profile and choose the ride type you will accept.'}
+                </Text>
               </View>
 
               <Pressable style={styles.compactEditButton} onPress={openEditModal}>
-                <Ionicons name="create-outline" size={14} color={teal} />
-                <Text style={styles.compactEditButtonText}>Edit</Text>
+                <Ionicons name={hasVehicle ? 'create-outline' : 'add-outline'} size={14} color={teal} />
+                <Text style={styles.compactEditButtonText}>{hasVehicle ? 'Edit' : 'Add'}</Text>
               </Pressable>
             </View>
 
-            <DetailRow label="License plate" value={details.licensePlate} />
-            <DetailRow label="Car model" value={details.carModel} />
-            <DetailRow label="Year" value={details.year} />
-            <DetailRow label="Color" value={details.color} />
-            <DetailRow label="Category" value={details.category} />
-            <DetailRow label="Registration no." value={details.registrationNumber} />
+            {hasVehicle ? (
+              <>
+                <DetailRow label="License plate" value={details.licensePlate} />
+                <DetailRow label="Car model" value={details.carModel} />
+                <DetailRow label="Year" value={details.year} />
+                <DetailRow label="Color" value={details.color} />
+                <DetailRow label="Riding vehicle" value={details.category} />
+                <DetailRow label="Registration no." value={details.registrationNumber} />
+              </>
+            ) : (
+              <View style={styles.emptyStateCard}>
+                <View style={styles.emptyStateIcon}>
+                  <Ionicons name="car-sport-outline" size={24} color={teal} />
+                </View>
+                <Text style={styles.emptyStateTitle}>No vehicle added yet</Text>
+                <Text style={styles.emptyStateText}>
+                  Add the vehicle you use for rides and select whether you drive a bike, three wheeler, car, or van.
+                </Text>
+                <Pressable style={styles.primaryInlineButton} onPress={openEditModal}>
+                  <Text style={styles.primaryInlineButtonText}>Add Vehicle</Text>
+                </Pressable>
+              </View>
+            )}
           </View>
 
-          <Text style={styles.sectionTitle}>DANGER ZONE</Text>
+          {hasVehicle ? (
+            <>
+              <Text style={styles.sectionTitle}>DANGER ZONE</Text>
 
-          <View style={styles.groupCard}>
-            <View style={styles.dangerCard}>
-              <View style={styles.dangerHeader}>
-                <View style={styles.dangerIconWrap}>
-                  <Ionicons name="car-outline" size={16} color="#C13B3B" />
-                </View>
+              <View style={styles.groupCard}>
+                <View style={styles.dangerCard}>
+                  <View style={styles.dangerHeader}>
+                    <View style={styles.dangerIconWrap}>
+                      <Ionicons name="car-outline" size={16} color="#C13B3B" />
+                    </View>
 
-                <View style={styles.dangerTextWrap}>
-                  <Text style={styles.dangerTitle}>Remove vehicle</Text>
-                  <Text style={styles.dangerText}>Remove this car from your driver profile and stop receiving rides for it.</Text>
+                    <View style={styles.dangerTextWrap}>
+                      <Text style={styles.dangerTitle}>Remove vehicle</Text>
+                      <Text style={styles.dangerText}>
+                        Remove this car from your driver profile and stop receiving rides for it.
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Pressable style={styles.deleteButton} onPress={confirmRemoveVehicle}>
+                    <Text style={styles.deleteButtonText}>Remove Vehicle</Text>
+                  </Pressable>
                 </View>
               </View>
-
-              <Pressable style={styles.deleteButton} onPress={confirmRemoveVehicle}>
-                <Text style={styles.deleteButtonText}>Remove Vehicle</Text>
-              </Pressable>
-            </View>
-          </View>
+            </>
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -210,8 +264,12 @@ export default function DriverVehicleDetailsScreen() {
               <View style={styles.modalCard}>
                 <View style={styles.modalHeader}>
                   <View>
-                    <Text style={styles.modalTitle}>Update Vehicle Details</Text>
-                    <Text style={styles.modalSubtitle}>Edit your active driver vehicle information.</Text>
+                    <Text style={styles.modalTitle}>{hasVehicle ? 'Update Vehicle Details' : 'Add Vehicle Details'}</Text>
+                    <Text style={styles.modalSubtitle}>
+                      {hasVehicle
+                        ? 'Edit your active driver vehicle information.'
+                        : 'Add the vehicle you will use for rides and choose the riding vehicle type.'}
+                    </Text>
                   </View>
 
                   <Pressable style={styles.closeButton} onPress={closeEditModal}>
@@ -233,7 +291,28 @@ export default function DriverVehicleDetailsScreen() {
                 <FormInput label="Car model" value={form.carModel} onChangeText={(value) => handleChange('carModel', value)} />
                 <FormInput label="Year" value={form.year} onChangeText={(value) => handleChange('year', value)} keyboardType="number-pad" />
                 <FormInput label="Color" value={form.color} onChangeText={(value) => handleChange('color', value)} />
-                <FormInput label="Category" value={form.category} onChangeText={(value) => handleChange('category', value)} />
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Riding vehicle</Text>
+                  <View style={styles.vehicleTypeGrid}>
+                    {vehicleTypeOptions.map((option) => {
+                      const isSelected = form.category === option.value;
+
+                      return (
+                        <Pressable
+                          key={option.value}
+                          style={[styles.vehicleTypeChip, isSelected ? styles.vehicleTypeChipSelected : null]}
+                          onPress={() => handleChange('category', option.value)}>
+                          <Ionicons name={option.icon} size={18} color={isSelected ? '#FFFFFF' : teal} />
+                          <Text style={[styles.vehicleTypeText, isSelected ? styles.vehicleTypeTextSelected : null]}>
+                            {option.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+
                 <FormInput
                   label="Registration number"
                   value={form.registrationNumber}
@@ -246,7 +325,7 @@ export default function DriverVehicleDetailsScreen() {
                   </Pressable>
 
                   <Pressable style={styles.primaryButton} onPress={handleSave}>
-                    <Text style={styles.primaryButtonText}>Update Vehicle</Text>
+                    <Text style={styles.primaryButtonText}>{hasVehicle ? 'Update Vehicle' : 'Add Vehicle'}</Text>
                   </Pressable>
                 </View>
               </View>
@@ -391,6 +470,7 @@ const styles = StyleSheet.create({
     color: teal,
     fontSize: 12,
     fontWeight: '700',
+    textTransform: 'capitalize',
   },
   heroHint: {
     color: '#617C79',
@@ -461,6 +541,51 @@ const styles = StyleSheet.create({
   compactEditButtonText: {
     color: teal,
     fontSize: 12,
+    fontWeight: '800',
+  },
+  emptyStateCard: {
+    borderRadius: 14,
+    backgroundColor: '#F7FBFA',
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  emptyStateIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#E7F5F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  emptyStateTitle: {
+    color: '#102A28',
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  emptyStateText: {
+    color: '#617C79',
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginBottom: 14,
+  },
+  primaryInlineButton: {
+    minHeight: 40,
+    borderRadius: 12,
+    backgroundColor: teal,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryInlineButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: '800',
   },
   inlineDivider: {
@@ -613,6 +738,37 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 14,
     fontWeight: '600',
+  },
+  vehicleTypeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  vehicleTypeChip: {
+    minHeight: 44,
+    minWidth: '47%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#F7FBFA',
+  },
+  vehicleTypeChipSelected: {
+    backgroundColor: teal,
+    borderColor: teal,
+  },
+  vehicleTypeText: {
+    color: '#102A28',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  vehicleTypeTextSelected: {
+    color: '#FFFFFF',
   },
   modalActions: {
     flexDirection: 'row',
