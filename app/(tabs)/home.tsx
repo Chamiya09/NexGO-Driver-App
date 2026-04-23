@@ -22,11 +22,12 @@ import {
   RideNotificationData,
   haversineKm,
 } from '@/components/NotificationAlert';
+import * as Location from 'expo-location';
 
 const teal = '#008080';
 
-// Static driver position — replace with expo-location for real GPS
-const DRIVER_COORDS = { latitude: 6.9271, longitude: 79.8612 };
+// Replaced with dynamic location
+// const DRIVER_COORDS = { latitude: 6.9271, longitude: 79.8612 };
 
 // ── Passenger marker pin ──────────────────────────────────────────────────────
 type PassengerPin = {
@@ -47,6 +48,35 @@ export default function DriverHomeScreen() {
   const [socketOk, setSocketOk]           = useState(driverSocket.connected);
   const [passengerPins, setPassengerPins] = useState<PassengerPin[]>([]);
   const isOnlineRef                       = useRef(false);
+  
+  const [driverCoords, setDriverCoords] = useState<{latitude: number; longitude: number} | null>(null);
+
+  // ── Setup Location ───────────────────────────────────────────────────────
+  useEffect(() => {
+    let watchSubscription: Location.LocationSubscription | null = null;
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.log('[Driver] Permission to access location was denied');
+        return;
+      }
+      // Get initial pos immediately to show map fast
+      let initPos = await Location.getCurrentPositionAsync({});
+      setDriverCoords({ latitude: initPos.coords.latitude, longitude: initPos.coords.longitude });
+
+      watchSubscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 5000,
+          distanceInterval: 10,
+        },
+        (loc) => {
+          setDriverCoords({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+        }
+      );
+    })();
+    return () => { watchSubscription?.remove(); };
+  }, []);
 
   // ── Socket connection status ─────────────────────────────────────────────
   useEffect(() => {
@@ -62,23 +92,23 @@ export default function DriverHomeScreen() {
 
   // ── Location broadcast every 10 s ────────────────────────────────────────
   useEffect(() => {
-    if (!driver?.id) return;
+    if (!driver?.id || !driverCoords) return;
     const emit = () =>
-      driverSocket.emit('updateDriverLocation', { driverId: driver.id, ...DRIVER_COORDS });
+      driverSocket.emit('updateDriverLocation', { driverId: driver.id, ...driverCoords });
     emit();
     const id = setInterval(emit, 10_000);
     return () => clearInterval(id);
-  }, [driver?.id]);
+  }, [driver?.id, driverCoords]);
 
   // ── Incoming ride listener ────────────────────────────────────────────────
   useEffect(() => {
     const onIncomingRide = (rideData: RideNotificationData) => {
       console.log('[Driver] incomingRide received:', rideData);
 
-      const distanceKm = haversineKm(
-        DRIVER_COORDS.latitude,   DRIVER_COORDS.longitude,
+      const computedDistance = driverCoords ? haversineKm(
+        driverCoords.latitude,   driverCoords.longitude,
         rideData.pickup.latitude, rideData.pickup.longitude,
-      );
+      ) : 0;
 
       // Always save to the global notifications list
       addNotification({
@@ -89,7 +119,7 @@ export default function DriverHomeScreen() {
         price:         rideData.price,
         pickup:        rideData.pickup,
         dropoff:       rideData.dropoff,
-        distanceKm,
+        distanceKm: computedDistance,
       });
 
       // Show passenger pickup pin on the map
@@ -111,12 +141,12 @@ export default function DriverHomeScreen() {
         console.log('[Driver] Alert suppressed — driver is Offline');
         return;
       }
-      alertRef.current?.show({ ...rideData, distanceKm });
+      alertRef.current?.show({ ...rideData, distanceKm: computedDistance });
     };
 
     driverSocket.on('incomingRide', onIncomingRide);
     return () => { driverSocket.off('incomingRide', onIncomingRide); };
-  }, [addNotification]);
+  }, [addNotification, driverCoords]);
 
   // ── Online toggle ─────────────────────────────────────────────────────────
   const handleToggleOnline = (value: boolean) => {
@@ -140,18 +170,19 @@ export default function DriverHomeScreen() {
         dLat:  String(data.dropoff.latitude),
         dLng:  String(data.dropoff.longitude),
         dName: data.dropoff.name ?? '',
-        drLat: String(DRIVER_COORDS.latitude),
-        drLng: String(DRIVER_COORDS.longitude),
+        ...(driverCoords && { drLat: String(driverCoords.latitude), drLng: String(driverCoords.longitude) }),
       },
     });
   };
 
   // ── Re-center map ────────────────────────────────────────────────────────
   const handleLocate = () => {
-    mapRef.current?.animateToRegion(
-      { ...DRIVER_COORDS, latitudeDelta: 0.018, longitudeDelta: 0.018 },
-      600
-    );
+    if (driverCoords) {
+      mapRef.current?.animateToRegion(
+        { ...driverCoords, latitudeDelta: 0.018, longitudeDelta: 0.018 },
+        600
+      );
+    }
   };
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -160,25 +191,26 @@ export default function DriverHomeScreen() {
       <StatusBar style="dark" translucent backgroundColor="transparent" />
 
       {/* ── Real MapView ── */}
-      <MapView
-        ref={mapRef}
-        style={StyleSheet.absoluteFillObject}
-        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-        mapType="standard"
-        showsUserLocation={false}
-        showsMyLocationButton={false}
-        initialRegion={{
-          ...DRIVER_COORDS,
-          latitudeDelta:  0.025,
-          longitudeDelta: 0.025,
-        }}>
+      {driverCoords && (
+        <MapView
+          ref={mapRef}
+          style={StyleSheet.absoluteFillObject}
+          provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+          mapType="standard"
+          showsUserLocation={false}
+          showsMyLocationButton={false}
+          initialRegion={{
+            ...driverCoords,
+            latitudeDelta:  0.025,
+            longitudeDelta: 0.025,
+          }}>
 
-        {/* ── Driver position marker ── */}
-        <Marker coordinate={DRIVER_COORDS} anchor={{ x: 0.5, y: 0.5 }}>
-          <View style={styles.driverPin}>
-            <Ionicons name="car-sport" size={18} color="#FFF" />
-          </View>
-        </Marker>
+          {/* ── Driver position marker ── */}
+          <Marker coordinate={driverCoords} anchor={{ x: 0.5, y: 0.5 }}>
+            <View style={styles.driverPin}>
+              <Ionicons name="car-sport" size={18} color="#FFF" />
+            </View>
+          </Marker>
 
         {/* ── Passenger pickup markers (one per incoming ride) ── */}
         {passengerPins.map((pin) => (
@@ -192,8 +224,7 @@ export default function DriverHomeScreen() {
                 params: {
                   id: pin.rideId,
                   passengerName: pin.passengerName,
-                  drLat: String(DRIVER_COORDS.latitude),
-                  drLng: String(DRIVER_COORDS.longitude),
+                  ...(driverCoords && { drLat: String(driverCoords.latitude), drLng: String(driverCoords.longitude) })
                 },
               })
             }>
@@ -211,7 +242,8 @@ export default function DriverHomeScreen() {
             </View>
           </Marker>
         ))}
-      </MapView>
+        </MapView>
+      )}
 
       {/*
         NotificationAlert MUST be at the root View level (not inside SafeAreaView)
