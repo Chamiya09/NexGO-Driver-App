@@ -171,8 +171,12 @@ export const NotificationAlert = forwardRef<NotificationAlertRef, Props>(
 NotificationAlert.displayName = 'NotificationAlert';
 
 // ── Styles ─────────────────────────────────────────────────────────────────────
+// Offset from the top of the SCREEN (not SafeAreaView):
+// status bar height + top bar card height (~70) + gap
 const TOP_OFFSET =
-  Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 32) + 76 : 108;
+  Platform.OS === 'android'
+    ? (RNStatusBar.currentHeight ?? 24) + 78
+    : 110;
 
 const styles = StyleSheet.create({
   card: {
