@@ -4,27 +4,17 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import AuthShell from '@/components/auth/auth-shell';
-import { API_BASE_URL, parseApiResponse } from '@/lib/api';
+import { useDriverAuth } from '@/context/driver-auth-context';
 
 const teal = '#008080';
 
-type DriverAuthResponse = {
-  token: string;
-  driver: {
-    id: string;
-    fullName: string;
-    email: string;
-    phoneNumber: string;
-  };
-};
-
 export default function DriverRegisterScreen() {
+  const { register, loading } = useDriverAuth();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-  const [loading, setLoading] = useState(false);
 
   const onSubmit = async () => {
     if (!fullName.trim() || !email.trim() || !phoneNumber.trim() || !password.trim()) {
@@ -37,30 +27,19 @@ export default function DriverRegisterScreen() {
       return;
     }
 
-    setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/driver-auth/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fullName: fullName.trim(),
-          email: email.trim(),
-          phoneNumber: phoneNumber.trim(),
-          password,
-        }),
+      await register({
+        fullName: fullName.trim(),
+        email: email.trim(),
+        phoneNumber: phoneNumber.trim(),
+        password,
       });
-
-      await parseApiResponse<DriverAuthResponse>(response);
-      Alert.alert('Account created', 'Your driver account has been created. Please sign in.', [
-        { text: 'OK', onPress: () => router.replace('/login') },
+      Alert.alert('Account created', 'Your driver account has been created.', [
+        { text: 'OK', onPress: () => router.replace('/(tabs)/home') },
       ]);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Registration failed';
       Alert.alert('Registration failed', message);
-    } finally {
-      setLoading(false);
     }
   };
 

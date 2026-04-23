@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -17,8 +17,7 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import { API_BASE_URL, parseApiResponse } from '@/lib/api';
-import { getDriverToken } from '@/lib/driver-session';
+import { useDriverAuth } from '@/context/driver-auth-context';
 
 const teal = '#008080';
 
@@ -32,11 +31,23 @@ const initialDriverDetails = {
 type DriverDetailsField = keyof typeof initialDriverDetails;
 
 export default function DriverPersonalDetailsScreen() {
-  const [details, setDetails] = useState(initialDriverDetails);
-  const [form, setForm] = useState(initialDriverDetails);
+  const { driver, updateProfile } = useDriverAuth();
+  const driverDetails = useMemo(() => ({
+    fullName: driver?.fullName || initialDriverDetails.fullName,
+    email: driver?.email || initialDriverDetails.email,
+    phoneNumber: driver?.phoneNumber || initialDriverDetails.phoneNumber,
+    emergencyContact: driver?.emergencyContact || initialDriverDetails.emergencyContact,
+  }), [driver?.email, driver?.emergencyContact, driver?.fullName, driver?.phoneNumber]);
+  const [details, setDetails] = useState(driverDetails);
+  const [form, setForm] = useState(driverDetails);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDetails(driverDetails);
+    setForm(driverDetails);
+  }, [driverDetails]);
 
   const initials = details.fullName
     .split(' ')
@@ -79,28 +90,13 @@ export default function DriverPersonalDetailsScreen() {
       return;
     }
 
-    const token = getDriverToken();
-    if (!token) {
-      setErrorMessage('Please sign in again to update your driver profile.');
-      return;
-    }
-
     try {
-      const response = await fetch(`${API_BASE_URL}/driver-auth/me`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          fullName,
-          email: email.toLowerCase(),
-          phoneNumber,
-          emergencyContact,
-        }),
+      await updateProfile({
+        fullName,
+        email: email.toLowerCase(),
+        phoneNumber,
+        emergencyContact,
       });
-
-      await parseApiResponse<{ driver: unknown }>(response);
       setDetails({
         fullName,
         email: email.toLowerCase(),

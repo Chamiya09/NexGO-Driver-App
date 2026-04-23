@@ -14,7 +14,7 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import { clearDriverToken } from '@/lib/driver-session';
+import { useDriverAuth } from '@/context/driver-auth-context';
 
 const teal = '#008080';
 
@@ -26,7 +26,7 @@ type ProfileSection = {
   badge?: string;
 };
 
-const profileSections: ProfileSection[] = [
+const baseProfileSections: ProfileSection[] = [
   {
     title: 'Personal Details',
     subtitle: 'Driver identity, phone, email, and account profile',
@@ -54,13 +54,37 @@ const profileSections: ProfileSection[] = [
   },
 ];
 
-const profileMetrics = [
-  { label: 'Rating', value: '4.9', icon: 'star-outline' as const },
-  { label: 'Trips', value: '184', icon: 'checkmark-done-outline' as const },
-  { label: 'Tier', value: 'Gold', icon: 'ribbon-outline' as const },
-];
-
 export default function DriverProfileScreen() {
+  const { driver, logout } = useDriverAuth();
+
+  const fullName = driver?.fullName || 'NexGO Driver';
+  const initials = fullName
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || '')
+    .join('');
+  const vehicle = driver?.vehicle;
+  const vehicleSummary =
+    vehicle?.licensePlate && vehicle?.carModel
+      ? `License plate ${vehicle.licensePlate}, ${vehicle.carModel}${vehicle.year ? ` ${vehicle.year}` : ''}`
+      : 'Add your license plate and car model';
+  const approvedDocuments = (driver?.documents || []).filter((document) => document.status === 'approved').length;
+  const documentCount = driver?.documents?.length || 3;
+  const profileMetrics = [
+    { label: 'Status', value: driver?.status || 'pending', icon: 'shield-checkmark-outline' as const },
+    { label: 'Docs', value: `${approvedDocuments}/${documentCount}`, icon: 'document-text-outline' as const },
+    { label: 'Vehicle', value: vehicle?.status || 'pending', icon: 'car-sport-outline' as const },
+  ];
+  const profileSections = baseProfileSections.map((section) =>
+    section.title === 'Vehicle Details'
+      ? {
+          ...section,
+          subtitle: vehicleSummary,
+        }
+      : section
+  );
+
   const confirmLogout = () => {
     Alert.alert('Log out', 'Do you want to sign out of this driver device?', [
       { text: 'Cancel', style: 'cancel' },
@@ -68,7 +92,7 @@ export default function DriverProfileScreen() {
         text: 'Log out',
         style: 'destructive',
         onPress: () => {
-          clearDriverToken();
+          logout();
           router.replace('/login');
         },
       },
@@ -82,10 +106,10 @@ export default function DriverProfileScreen() {
         <View style={styles.heroCard}>
           <View style={styles.profileHead}>
             <View style={styles.avatarCircle}>
-              <Text style={styles.avatarInitials}>CD</Text>
+              <Text style={styles.avatarInitials}>{initials || 'D'}</Text>
             </View>
-            <Text style={styles.profileName}>Chamod Driver</Text>
-            <Text style={styles.memberCaption}>NexGO Driver account</Text>
+            <Text style={styles.profileName}>{fullName}</Text>
+            <Text style={styles.memberCaption}>{driver?.email || 'NexGO Driver account'}</Text>
           </View>
 
           <View style={styles.metricsRow}>

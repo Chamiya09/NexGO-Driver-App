@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -17,8 +17,7 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import { API_BASE_URL, parseApiResponse } from '@/lib/api';
-import { getDriverToken } from '@/lib/driver-session';
+import { useDriverAuth } from '@/context/driver-auth-context';
 
 const teal = '#008080';
 
@@ -34,11 +33,32 @@ const initialVehicleDetails = {
 type VehicleDetailsField = keyof typeof initialVehicleDetails;
 
 export default function DriverVehicleDetailsScreen() {
-  const [details, setDetails] = useState(initialVehicleDetails);
-  const [form, setForm] = useState(initialVehicleDetails);
+  const { driver, updateVehicle } = useDriverAuth();
+  const vehicleDetails = useMemo(() => ({
+    licensePlate: driver?.vehicle?.licensePlate || initialVehicleDetails.licensePlate,
+    carModel: driver?.vehicle?.carModel || initialVehicleDetails.carModel,
+    year: driver?.vehicle?.year || initialVehicleDetails.year,
+    color: driver?.vehicle?.color || initialVehicleDetails.color,
+    category: driver?.vehicle?.category || initialVehicleDetails.category,
+    registrationNumber: driver?.vehicle?.registrationNumber || initialVehicleDetails.registrationNumber,
+  }), [
+    driver?.vehicle?.carModel,
+    driver?.vehicle?.category,
+    driver?.vehicle?.color,
+    driver?.vehicle?.licensePlate,
+    driver?.vehicle?.registrationNumber,
+    driver?.vehicle?.year,
+  ]);
+  const [details, setDetails] = useState(vehicleDetails);
+  const [form, setForm] = useState(vehicleDetails);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDetails(vehicleDetails);
+    setForm(vehicleDetails);
+  }, [vehicleDetails]);
 
   const openEditModal = () => {
     setForm(details);
@@ -78,23 +98,8 @@ export default function DriverVehicleDetailsScreen() {
       return;
     }
 
-    const token = getDriverToken();
-    if (!token) {
-      setErrorMessage('Please sign in again to update vehicle details.');
-      return;
-    }
-
     try {
-      const response = await fetch(`${API_BASE_URL}/driver-auth/me/vehicle`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(nextDetails),
-      });
-
-      await parseApiResponse<{ driver: unknown }>(response);
+      await updateVehicle(nextDetails);
       setDetails(nextDetails);
       setIsEditModalVisible(false);
       setSuccessMessage('Vehicle details updated.');

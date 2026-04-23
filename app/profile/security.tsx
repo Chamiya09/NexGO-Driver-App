@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   Platform,
@@ -15,42 +15,28 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import { API_BASE_URL, parseApiResponse } from '@/lib/api';
-import { getDriverToken } from '@/lib/driver-session';
+import { useDriverAuth } from '@/context/driver-auth-context';
 
 const teal = '#008080';
 
 export default function DriverSecurityScreen() {
-  const [twoStepEnabled, setTwoStepEnabled] = useState(true);
+  const { driver, updateSecurity } = useDriverAuth();
+  const [twoStepEnabled, setTwoStepEnabled] = useState(driver?.security?.twoStepVerificationEnabled ?? true);
 
   const showPlaceholder = (title: string) => {
     Alert.alert(title, 'This is a placeholder action for the driver security flow.');
   };
 
+  useEffect(() => {
+    setTwoStepEnabled(driver?.security?.twoStepVerificationEnabled ?? true);
+  }, [driver?.security?.twoStepVerificationEnabled]);
+
   const updateTwoStepVerification = async (nextValue: boolean) => {
     const previousValue = twoStepEnabled;
     setTwoStepEnabled(nextValue);
 
-    const token = getDriverToken();
-    if (!token) {
-      setTwoStepEnabled(previousValue);
-      Alert.alert('Sign in required', 'Please sign in again to update security settings.');
-      return;
-    }
-
     try {
-      const response = await fetch(`${API_BASE_URL}/driver-auth/me/security`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          twoStepVerificationEnabled: nextValue,
-        }),
-      });
-
-      await parseApiResponse<{ driver: unknown }>(response);
+      await updateSecurity(nextValue);
     } catch (error) {
       setTwoStepEnabled(previousValue);
       const message = error instanceof Error ? error.message : 'Unable to update security settings.';

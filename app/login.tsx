@@ -15,8 +15,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import AuthShell from '@/components/auth/auth-shell';
-import { API_BASE_URL, parseApiResponse } from '@/lib/api';
-import { setDriverToken } from '@/lib/driver-session';
+import { useDriverAuth } from '@/context/driver-auth-context';
 
 const teal = '#008080';
 
@@ -32,21 +31,11 @@ type ResetStep = 'email' | 'otp' | 'password';
 const resetSteps: ResetStep[] = ['email', 'otp', 'password'];
 const resetResendSeconds = 60;
 
-type DriverAuthResponse = {
-  token: string;
-  driver: {
-    id: string;
-    fullName: string;
-    email: string;
-    phoneNumber: string;
-  };
-};
-
 export default function DriverLoginScreen() {
+  const { login, loading } = useDriverAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [isResetPasswordVisible, setIsResetPasswordVisible] = useState(false);
   const [resetForm, setResetForm] = useState(initialResetForm);
   const [resetStep, setResetStep] = useState<ResetStep>('email');
@@ -74,27 +63,12 @@ export default function DriverLoginScreen() {
       return;
     }
 
-    setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/driver-auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: email.trim(),
-          password,
-        }),
-      });
-
-      const data = await parseApiResponse<DriverAuthResponse>(response);
-      setDriverToken(data.token);
+      await login({ email: email.trim(), password });
       router.replace('/(tabs)/home');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Login failed';
       Alert.alert('Login failed', message);
-    } finally {
-      setLoading(false);
     }
   };
 

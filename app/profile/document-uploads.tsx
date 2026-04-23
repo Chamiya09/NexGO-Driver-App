@@ -14,14 +14,13 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import { API_BASE_URL, parseApiResponse } from '@/lib/api';
-import { getDriverToken } from '@/lib/driver-session';
+import { type DriverDocument as SavedDriverDocument, useDriverAuth } from '@/context/driver-auth-context';
 
 const teal = '#008080';
 
-type DocumentStatus = 'approved' | 'review' | 'missing';
+type DocumentStatus = 'approved' | 'review' | 'missing' | 'rejected';
 
-type DriverDocument = {
+type UploadDocument = {
   id: string;
   title: string;
   subtitle: string;
@@ -30,7 +29,7 @@ type DriverDocument = {
   updatedAt: string;
 };
 
-const initialDocuments: DriverDocument[] = [
+const initialDocuments: UploadDocument[] = [
   {
     id: 'license',
     title: 'Driver License',
@@ -76,34 +75,42 @@ const statusMeta = {
     backgroundColor: '#FFF4F4',
     icon: 'alert-circle-outline' as const,
   },
+  rejected: {
+    label: 'REJECTED',
+    color: '#C13B3B',
+    backgroundColor: '#FFF4F4',
+    icon: 'close-circle-outline' as const,
+  },
 };
 
+const buildDocumentsFromDriver = (savedDocuments: SavedDriverDocument[] = []) =>
+  initialDocuments.map((document) => {
+    const savedDocument = savedDocuments.find((item) => item.documentType === document.id);
+    return savedDocument
+      ? {
+          ...document,
+          status: savedDocument.status,
+          updatedAt: savedDocument.submittedAt
+            ? `Submitted ${new Date(savedDocument.submittedAt).toLocaleDateString()}`
+            : document.updatedAt,
+        }
+      : document;
+  });
+
 export default function DriverDocumentUploadsScreen() {
-  const [documents, setDocuments] = useState(initialDocuments);
+  const { driver, updateDocument } = useDriverAuth();
+  const [documents, setDocuments] = useState(() => buildDocumentsFromDriver(driver?.documents));
 
   const requiredCount = documents.length;
   const completeCount = documents.filter((document) => document.status === 'approved').length;
 
+  React.useEffect(() => {
+    setDocuments(buildDocumentsFromDriver(driver?.documents));
+  }, [driver?.documents]);
+
   const handleUpload = async (documentId: string) => {
-    const token = getDriverToken();
-    if (!token) {
-      Alert.alert('Sign in required', 'Please sign in again to upload driver documents.');
-      return;
-    }
-
     try {
-      const response = await fetch(`${API_BASE_URL}/driver-auth/me/documents/${documentId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          fileUrl: `mock://${documentId}-${Date.now()}`,
-        }),
-      });
-
-      await parseApiResponse<{ driver: unknown }>(response);
+      await updateDocument(documentId as 'license' | 'insurance' | 'registration', `mock://${documentId}-${Date.now()}`);
       setDocuments((current) =>
         current.map((document) =>
           document.id === documentId
@@ -178,7 +185,7 @@ export default function DriverDocumentUploadsScreen() {
   );
 }
 
-function DocumentCard({ document, onUpload }: { document: DriverDocument; onUpload: () => void }) {
+function DocumentCard({ document, onUpload }: { document: UploadDocument; onUpload: () => void }) {
   const meta = statusMeta[document.status];
   const actionLabel = document.status === 'missing' ? 'Upload' : 'Replace';
 
