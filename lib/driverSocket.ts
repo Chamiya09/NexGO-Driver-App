@@ -3,11 +3,9 @@
 // Import `driverSocket` wherever you need to emit or listen.
 
 import { io, Socket } from 'socket.io-client';
+import { API_BASE_URL } from './api';
 
-const SOCKET_SERVER_URL = (
-  process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5000'
-).replace(/\/api$/, '');
-
+const SOCKET_SERVER_URL = API_BASE_URL.replace(/\/api$/, '');
 // Create a single persistent socket instance
 const driverSocket: Socket = io(SOCKET_SERVER_URL, {
   transports: ['websocket'],
