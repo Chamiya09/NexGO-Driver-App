@@ -91,6 +91,13 @@ export default function TabLayout() {
 
 
       <Tabs.Screen
+        name="active-ride"
+        options={{
+          href: null,
+        }}
+      />
+
+      <Tabs.Screen
         name="trips"
         options={{
           title: 'Trips',
