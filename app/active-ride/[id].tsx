@@ -30,7 +30,7 @@ const teal = '#008080';
 // ── Types ─────────────────────────────────────────────────────────────────────
 type LatLng = { latitude: number; longitude: number };
 type ActiveRideStatus = 'Accepted' | 'Arrived' | 'InProgress';
-type RidePhase = 'PICKUP' | 'TRIP';
+type NavigationPhase = 'PICKUP' | 'TRIP';
 
 // ── Route fetcher ────────────────────────────────────────────────────────
 async function fetchOsrmRoute(from: LatLng, to: LatLng) {
@@ -88,9 +88,9 @@ export default function ActiveRideScreen() {
   );
 
   const [status, setStatus] = useState<ActiveRideStatus>('Accepted');
-  const [ridePhase, setRidePhase] = useState<RidePhase>('PICKUP');
+  const [navigationPhase, setNavigationPhase] = useState<NavigationPhase>('PICKUP');
 
-  const currentDestination = ridePhase === 'PICKUP' ? pickupLocation : dropoffLocation;
+  const currentDestination = navigationPhase === 'PICKUP' ? pickupLocation : dropoffLocation;
 
   const [heading, setHeading] = useState(0);
   const [routeCoords, setRouteCoords] = useState<LatLng[]>([]);
@@ -106,7 +106,7 @@ export default function ActiveRideScreen() {
     const fetchRoute = async () => {
       setLoadingRoute(true);
       try {
-        const result = ridePhase === 'PICKUP'
+        const result = navigationPhase === 'PICKUP'
           ? await fetchOsrmRoute(driverPos, pickupLocation)
           : await fetchOsrmRoute(pickupLocation, dropoffLocation);
 
@@ -138,7 +138,7 @@ export default function ActiveRideScreen() {
 
     fetchRoute();
     return () => { active = false; };
-  }, [ridePhase, pickupLocation.latitude, pickupLocation.longitude, dropoffLocation.latitude, dropoffLocation.longitude]);
+  }, [navigationPhase, pickupLocation.latitude, pickupLocation.longitude, dropoffLocation.latitude, dropoffLocation.longitude]);
 
   // Continuously snap polyline backwards as driverPos moves
   useEffect(() => {
@@ -217,7 +217,7 @@ export default function ActiveRideScreen() {
 
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setStatus('Arrived');
-    setRidePhase('TRIP');
+    setNavigationPhase('TRIP');
     setProcessing(false);
   };
 
@@ -274,7 +274,7 @@ export default function ActiveRideScreen() {
         </Marker>
 
         {/* Pickup marker (Person) */}
-        {ridePhase === 'PICKUP' && (
+        {navigationPhase === 'PICKUP' && (
           <Marker coordinate={pickupLocation} anchor={{ x: 0.5, y: 1 }} zIndex={4}>
             <View style={styles.premiumDestMarker}>
               <View style={[styles.premiumIconWrap, { backgroundColor: teal }]}>
@@ -287,7 +287,7 @@ export default function ActiveRideScreen() {
         )}
 
         {/* Dropoff marker (Flag) */}
-        {ridePhase === 'TRIP' && (
+        {navigationPhase === 'TRIP' && (
           <Marker coordinate={dropoffLocation} anchor={{ x: 0.5, y: 1 }} zIndex={4}>
             <View style={styles.premiumDestMarker}>
               <View style={[styles.premiumIconWrap, { backgroundColor: '#1A365D' }]}>
@@ -304,13 +304,13 @@ export default function ActiveRideScreen() {
           <>
             <Polyline
               coordinates={slicedRouteCoords}
-              strokeColor={ridePhase === 'PICKUP' ? '#017270' : '#0B2347'}
+              strokeColor={navigationPhase === 'PICKUP' ? '#017270' : '#0B2347'}
               strokeWidth={9}
               lineJoin="round" lineCap="round" zIndex={2}
             />
             <Polyline
               coordinates={slicedRouteCoords}
-              strokeColor={ridePhase === 'PICKUP' ? teal : '#1E40AF'}
+              strokeColor={navigationPhase === 'PICKUP' ? teal : '#1E40AF'}
               strokeWidth={5}
               lineJoin="round" lineCap="round" zIndex={3}
             />
@@ -321,7 +321,7 @@ export default function ActiveRideScreen() {
       {/* ── Top bar ── */}
       <SafeAreaView style={styles.topSafe}>
         <View style={styles.statusPillTop}>
-          <View style={[styles.statusDotPulse, { backgroundColor: ridePhase === 'PICKUP' ? teal : '#1E40AF' }]} />
+          <View style={[styles.statusDotPulse, { backgroundColor: navigationPhase === 'PICKUP' ? teal : '#1E40AF' }]} />
           <Text style={styles.statusPillText}>
             {status === 'Accepted' ? 'En route to pickup' : status === 'Arrived' ? 'At Pickup' : 'Heading to destination'}
           </Text>
