@@ -22,7 +22,7 @@ type ProfileSection = {
   title: string;
   subtitle: string;
   icon: keyof typeof Ionicons.glyphMap;
-  route?: '/profile/personal-details' | '/profile/document-uploads' | '/profile/security';
+  route?: '/profile/personal-details' | '/profile/document-uploads' | '/profile/security' | '/profile/earnings';
   badge?: string;
 };
 
@@ -45,6 +45,12 @@ const baseProfileSections: ProfileSection[] = [
     subtitle: 'Password, privacy controls, and trusted devices',
     icon: 'shield-checkmark-outline',
     route: '/profile/security',
+  },
+  {
+    title: 'Earnings Dashboard',
+    subtitle: 'View your wallet, payout settings, and daily revenue',
+    icon: 'wallet-outline',
+    route: '/profile/earnings',
   },
 ];
 
