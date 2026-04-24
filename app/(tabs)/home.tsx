@@ -38,18 +38,18 @@ type PassengerPin = {
 };
 
 export default function DriverHomeScreen() {
-  const { driver }         = useDriverAuth();
-  const router             = useRouter();
+  const { driver } = useDriverAuth();
+  const router = useRouter();
   const { addNotification } = useNotifications();
-  const mapRef             = useRef<MapView>(null);
-  const alertRef           = useRef<NotificationAlertRef>(null);
+  const mapRef = useRef<MapView>(null);
+  const alertRef = useRef<NotificationAlertRef>(null);
 
-  const [isOnline, setIsOnline]           = useState(false);
-  const [socketOk, setSocketOk]           = useState(driverSocket.connected);
+  const [isOnline, setIsOnline] = useState(false);
+  const [socketOk, setSocketOk] = useState(driverSocket.connected);
   const [passengerPins, setPassengerPins] = useState<PassengerPin[]>([]);
-  const isOnlineRef                       = useRef(false);
-  
-  const [driverCoords, setDriverCoords] = useState<{latitude: number; longitude: number} | null>(null);
+  const isOnlineRef = useRef(false);
+
+  const [driverCoords, setDriverCoords] = useState<{ latitude: number; longitude: number } | null>(null);
 
   // ── Setup Location ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -80,12 +80,12 @@ export default function DriverHomeScreen() {
 
   // ── Socket connection status ─────────────────────────────────────────────
   useEffect(() => {
-    const onConnect    = () => setSocketOk(true);
+    const onConnect = () => setSocketOk(true);
     const onDisconnect = () => setSocketOk(false);
-    driverSocket.on('connect',    onConnect);
+    driverSocket.on('connect', onConnect);
     driverSocket.on('disconnect', onDisconnect);
     return () => {
-      driverSocket.off('connect',    onConnect);
+      driverSocket.off('connect', onConnect);
       driverSocket.off('disconnect', onDisconnect);
     };
   }, []);
@@ -94,11 +94,11 @@ export default function DriverHomeScreen() {
   useEffect(() => {
     if (!driver?.id || !driverCoords) return;
     const emit = () =>
-      driverSocket.emit('updateDriverLocation', { driverId: driver.id, ...driverCoords });
+      driverSocket.emit('updateDriverLocation', { driverId: driver.id, ...driverCoords, isOnline: isOnlineRef.current });
     emit();
     const id = setInterval(emit, 10_000);
     return () => clearInterval(id);
-  }, [driver?.id, driverCoords]);
+  }, [driver?.id, driverCoords, isOnline]);
 
   // ── Incoming ride listener ────────────────────────────────────────────────
   useEffect(() => {
@@ -106,19 +106,19 @@ export default function DriverHomeScreen() {
       console.log('[Driver] incomingRide received:', rideData);
 
       const computedDistance = driverCoords ? haversineKm(
-        driverCoords.latitude,   driverCoords.longitude,
+        driverCoords.latitude, driverCoords.longitude,
         rideData.pickup.latitude, rideData.pickup.longitude,
       ) : 0;
 
       // Always save to the global notifications list
       addNotification({
-        rideId:        rideData.rideId,
-        passengerId:   rideData.passengerId,
+        rideId: rideData.rideId,
+        passengerId: rideData.passengerId,
         passengerName: rideData.passengerName,
-        vehicleType:   rideData.vehicleType,
-        price:         rideData.price,
-        pickup:        rideData.pickup,
-        dropoff:       rideData.dropoff,
+        vehicleType: rideData.vehicleType,
+        price: rideData.price,
+        pickup: rideData.pickup,
+        dropoff: rideData.dropoff,
         distanceKm: computedDistance,
       });
 
@@ -128,10 +128,10 @@ export default function DriverHomeScreen() {
         return [
           ...prev,
           {
-            rideId:        rideData.rideId,
+            rideId: rideData.rideId,
             passengerName: rideData.passengerName,
-            latitude:      rideData.pickup.latitude,
-            longitude:     rideData.pickup.longitude,
+            latitude: rideData.pickup.latitude,
+            longitude: rideData.pickup.longitude,
           },
         ];
       });
@@ -148,11 +148,27 @@ export default function DriverHomeScreen() {
     return () => { driverSocket.off('incomingRide', onIncomingRide); };
   }, [addNotification, driverCoords]);
 
+  // ── Remove ride listener (Atomic acceptance wipe) ─────────────────────────
+  useEffect(() => {
+    const onRemoveRide = ({ rideId }: { rideId: string }) => {
+      setPassengerPins((prev) => prev.filter(p => p.rideId !== rideId));
+    };
+    driverSocket.on('remove_ride_request', onRemoveRide);
+    return () => driverSocket.off('remove_ride_request', onRemoveRide);
+  }, []);
+
   // ── Online toggle ─────────────────────────────────────────────────────────
   const handleToggleOnline = (value: boolean) => {
     isOnlineRef.current = value;
     setIsOnline(value);
+
+    // Attempt local notifications cleanups while pushing database updates asynchronously
     if (!value) alertRef.current?.dismiss();
+    driverSocket.emit('toggle_online_status', { driverId: driver?.id, isOnline: value });
+
+    if (driverCoords) {
+      driverSocket.emit('updateDriverLocation', { driverId: driver?.id, ...driverCoords, isOnline: value });
+    }
   };
 
   // ── Alert tap → Ride Preview ─────────────────────────────────────────────
@@ -160,15 +176,15 @@ export default function DriverHomeScreen() {
     router.push({
       pathname: '/ride-preview/[id]',
       params: {
-        id:            data.rideId,
+        id: data.rideId,
         passengerName: data.passengerName,
-        vehicleType:   data.vehicleType,
-        price:         String(data.price),
-        pLat:  String(data.pickup.latitude),
-        pLng:  String(data.pickup.longitude),
-        pName: data.pickup.name  ?? '',
-        dLat:  String(data.dropoff.latitude),
-        dLng:  String(data.dropoff.longitude),
+        vehicleType: data.vehicleType,
+        price: String(data.price),
+        pLat: String(data.pickup.latitude),
+        pLng: String(data.pickup.longitude),
+        pName: data.pickup.name ?? '',
+        dLat: String(data.dropoff.latitude),
+        dLng: String(data.dropoff.longitude),
         dName: data.dropoff.name ?? '',
         ...(driverCoords && { drLat: String(driverCoords.latitude), drLng: String(driverCoords.longitude) }),
       },
@@ -203,7 +219,7 @@ export default function DriverHomeScreen() {
           showsMyLocationButton={false}
           initialRegion={{
             ...driverCoords,
-            latitudeDelta:  0.025,
+            latitudeDelta: 0.025,
             longitudeDelta: 0.025,
           }}>
           <UrlTile urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maximumZ={19} flipY={false} />
@@ -215,37 +231,50 @@ export default function DriverHomeScreen() {
             </View>
           </Marker>
 
-        {/* ── Passenger pickup markers (one per incoming ride) ── */}
-        {passengerPins.map((pin) => (
-          <Marker
-            key={pin.rideId}
-            coordinate={{ latitude: pin.latitude, longitude: pin.longitude }}
-            anchor={{ x: 0.5, y: 1 }}
-            onPress={() =>
-              router.push({
-                pathname: '/ride-preview/[id]',
-                params: {
-                  id: pin.rideId,
-                  passengerName: pin.passengerName,
-                  ...(driverCoords && { drLat: String(driverCoords.latitude), drLng: String(driverCoords.longitude) })
-                },
-              })
-            }>
-            {/* Custom passenger pin */}
-            <View style={styles.passengerPinWrap}>
-              <View style={styles.passengerPin}>
-                <Ionicons name="person" size={14} color="#FFF" />
+          {/* ── Passenger pickup markers (one per incoming ride) ── */}
+          {passengerPins.map((pin) => (
+            <Marker
+              key={pin.rideId}
+              coordinate={{ latitude: pin.latitude, longitude: pin.longitude }}
+              anchor={{ x: 0.5, y: 1 }}
+              onPress={() =>
+                router.push({
+                  pathname: '/ride-preview/[id]',
+                  params: {
+                    id: pin.rideId,
+                    passengerName: pin.passengerName,
+                    ...(driverCoords && { drLat: String(driverCoords.latitude), drLng: String(driverCoords.longitude) })
+                  },
+                })
+              }>
+              {/* Custom passenger pin */}
+              <View style={styles.passengerPinWrap}>
+                <View style={styles.passengerPin}>
+                  <Ionicons name="person" size={14} color="#FFF" />
+                </View>
+                <View style={styles.passengerPinLabel}>
+                  <Text style={styles.passengerPinText} numberOfLines={1}>
+                    {pin.passengerName.split(' ')[0]}
+                  </Text>
+                </View>
+                <View style={styles.passengerPinPointer} />
               </View>
-              <View style={styles.passengerPinLabel}>
-                <Text style={styles.passengerPinText} numberOfLines={1}>
-                  {pin.passengerName.split(' ')[0]}
-                </Text>
-              </View>
-              <View style={styles.passengerPinPointer} />
-            </View>
-          </Marker>
-        ))}
+            </Marker>
+          ))}
         </MapView>
+      )}
+
+      {/* ── Offline Overlay ── */}
+      {driverCoords && !isOnline && (
+        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(234, 230, 223, 0.85)', zIndex: 10, justifyContent: 'center', alignItems: 'center' }]} pointerEvents="box-none">
+          <View style={{ backgroundColor: '#FFFFFF', paddingHorizontal: 30, paddingVertical: 24, borderRadius: 28, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 18, elevation: 12, borderWidth: 1, borderColor: '#D9E9E6' }}>
+            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#E7F5F3', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+              <Ionicons name="car-outline" size={32} color="#102A28" />
+            </View>
+            <Text style={{ fontSize: 20, fontWeight: '900', color: '#102A28' }}>You are Offline</Text>
+            <Text style={{ fontSize: 15, fontWeight: '600', color: '#617C79', marginTop: 4 }}>Go Online to receive rides</Text>
+          </View>
+        </View>
       )}
 
       {/*
@@ -399,21 +428,21 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1, shadowRadius: 14, elevation: 5,
   },
   topBarLeft: { flex: 1 },
-  greeting:   { fontSize: 19, fontWeight: '800', color: '#102A28', marginBottom: 4 },
-  subRow:     { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  connDot:    { width: 7, height: 7, borderRadius: 4 },
-  connDotOn:  { backgroundColor: '#27AE60' },
+  greeting: { fontSize: 19, fontWeight: '800', color: '#102A28', marginBottom: 4 },
+  subRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  connDot: { width: 7, height: 7, borderRadius: 4 },
+  connDotOn: { backgroundColor: '#27AE60' },
   connDotOff: { backgroundColor: '#D97706' },
-  subtext:    { fontSize: 12, fontWeight: '600', color: '#617C79' },
+  subtext: { fontSize: 12, fontWeight: '600', color: '#617C79' },
   statusPill: {
     flexDirection: 'row', alignItems: 'center',
     paddingLeft: 10, paddingRight: 3, paddingVertical: 3,
     borderRadius: 16, gap: 4,
   },
-  pillOnline:     { backgroundColor: '#E9F8EF' },
-  pillOffline:    { backgroundColor: '#F0F5F4' },
-  statusLabel:    { fontSize: 12, fontWeight: '900' },
-  statusLabelOn:  { color: '#178A4F' },
+  pillOnline: { backgroundColor: '#E9F8EF' },
+  pillOffline: { backgroundColor: '#F0F5F4' },
+  statusLabel: { fontSize: 12, fontWeight: '900' },
+  statusLabelOn: { color: '#178A4F' },
   statusLabelOff: { color: '#617C79' },
 
   // Passenger count chip
@@ -425,7 +454,7 @@ const styles = StyleSheet.create({
     borderRadius: 12, borderWidth: 1, borderColor: '#BBE8CC',
     paddingHorizontal: 10, paddingVertical: 6,
   },
-  pinCountDot:  { width: 8, height: 8, borderRadius: 4, backgroundColor: '#27AE60' },
+  pinCountDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#27AE60' },
   pinCountText: { fontSize: 12, fontWeight: '800', color: '#178A4F' },
 
   // ── Locate button
@@ -450,23 +479,23 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08, shadowRadius: 18, elevation: 12,
   },
   handleRow: { alignItems: 'center', marginBottom: 12 },
-  handle:    { width: 36, height: 4, borderRadius: 2, backgroundColor: '#A0B3B2', opacity: 0.4 },
+  handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: '#A0B3B2', opacity: 0.4 },
   cardHeader: {
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'flex-start', marginBottom: 14, gap: 10,
   },
   cardEyebrow: { fontSize: 11, fontWeight: '800', color: teal, marginBottom: 2 },
-  cardTitle:   { fontSize: 18, fontWeight: '900', color: '#102A28' },
+  cardTitle: { fontSize: 18, fontWeight: '900', color: '#102A28' },
   liveBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: '#F7FBFA',
     borderWidth: 1, borderColor: '#D9E9E6',
     borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5,
   },
-  liveDot:   { width: 8, height: 8, borderRadius: 4, backgroundColor: '#A0B3B2' },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#A0B3B2' },
   liveDotOn: { backgroundColor: '#27AE60' },
   liveBadgeText: { fontSize: 12, fontWeight: '800', color: '#617C79' },
-  metricRow:  { flexDirection: 'row', gap: 10 },
+  metricRow: { flexDirection: 'row', gap: 10 },
   metricTile: {
     flex: 1, backgroundColor: '#F7FBFA',
     borderRadius: 14, borderWidth: 1, borderColor: '#D9E9E6', padding: 12,
