@@ -13,9 +13,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
+import MapView, { Marker, Polyline, UrlTile, Camera } from 'react-native-maps';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import * as geolib from 'geolib';
+import * as Location from 'expo-location';
 import { useDriverAuth } from '@/context/driver-auth-context';
 import driverSocket from '@/lib/driverSocket';
 
@@ -28,8 +29,8 @@ const teal = '#008080';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type LatLng = { latitude: number; longitude: number };
-// 'Accepted' = heading to pickup. 'Arrived' = at pickup. 'InProgress' = heading to dropoff.
 type ActiveRideStatus = 'Accepted' | 'Arrived' | 'InProgress';
+type RidePhase = 'PICKUP' | 'TRIP';
 
 // ── Route fetcher ────────────────────────────────────────────────────────
 async function fetchOsrmRoute(from: LatLng, to: LatLng) {
@@ -73,21 +74,25 @@ export default function ActiveRideScreen() {
   const vehicleType = params.vehicleType ?? 'Ride';
   const price = Number(params.price ?? 0);
 
-  const pickup: LatLng = { latitude: parseFloat(params.pLat ?? '0'), longitude: parseFloat(params.pLng ?? '0') };
-  const dropoff: LatLng = { latitude: parseFloat(params.dLat ?? '0'), longitude: parseFloat(params.dLng ?? '0') };
+  const pickupLocation: LatLng = { latitude: parseFloat(params.pLat ?? '0'), longitude: parseFloat(params.pLng ?? '0') };
+  const dropoffLocation: LatLng = { latitude: parseFloat(params.dLat ?? '0'), longitude: parseFloat(params.dLng ?? '0') };
   const pName = params.pName ?? '';
   const dName = params.dName ?? '';
 
   const hasDriverCoords = !!(params.drLat && params.drLng);
-  // Track continuous location (could use expo-location mapping logic here)
+  // Track continuous location
   const [driverPos, setDriverPos] = useState<LatLng>(
     hasDriverCoords
       ? { latitude: parseFloat(params.drLat!), longitude: parseFloat(params.drLng!) }
-      : pickup
+      : pickupLocation
   );
 
   const [status, setStatus] = useState<ActiveRideStatus>('Accepted');
-  const [navigationPhase, setNavigationPhase] = useState<'to_pickup' | 'to_destination'>('to_pickup');
+  const [ridePhase, setRidePhase] = useState<RidePhase>('PICKUP');
+
+  const currentDestination = ridePhase === 'PICKUP' ? pickupLocation : dropoffLocation;
+
+  const [heading, setHeading] = useState(0);
   const [routeCoords, setRouteCoords] = useState<LatLng[]>([]);
   const [slicedRouteCoords, setSlicedRouteCoords] = useState<LatLng[]>([]);
   const [distance, setDistance] = useState('—');
@@ -101,9 +106,9 @@ export default function ActiveRideScreen() {
     const fetchRoute = async () => {
       setLoadingRoute(true);
       try {
-        const result = navigationPhase === 'to_pickup'
-          ? await fetchOsrmRoute(driverPos, pickup) // Heading to pickup
-          : await fetchOsrmRoute(pickup, dropoff);  // Heading to drop-off
+        const result = ridePhase === 'PICKUP'
+          ? await fetchOsrmRoute(driverPos, pickupLocation)
+          : await fetchOsrmRoute(pickupLocation, dropoffLocation);
 
         if (active) {
           setRouteCoords(result.coords);
@@ -133,7 +138,7 @@ export default function ActiveRideScreen() {
 
     fetchRoute();
     return () => { active = false; };
-  }, [navigationPhase, pickup.latitude, pickup.longitude, dropoff.latitude, dropoff.longitude]);
+  }, [ridePhase, pickupLocation.latitude, pickupLocation.longitude, dropoffLocation.latitude, dropoffLocation.longitude]);
 
   // Continuously snap polyline backwards as driverPos moves
   useEffect(() => {
@@ -141,29 +146,68 @@ export default function ActiveRideScreen() {
       const closestIndex = geolib.findNearest(driverPos, routeCoords) as LatLng;
       const matchedIndex = routeCoords.findIndex(c => c.latitude === closestIndex.latitude && c.longitude === closestIndex.longitude);
       if (matchedIndex >= 0) {
-        setSlicedRouteCoords(routeCoords.slice(matchedIndex));
+        const remainingPath = routeCoords.slice(matchedIndex);
+        setSlicedRouteCoords(remainingPath);
       }
     }
   }, [driverPos, routeCoords]);
 
-  // ── Status updates from server (just in case they come through here) ───
+  // ── Auto Rotation Tracking & Sockets ───────────────────────────────────
   useEffect(() => {
-    const handleStatusUpdate = (data: { rideId: string; status: string }) => {
-      if (data.rideId === rideId) {
-        if (data.status === 'Cancelled') {
-          Alert.alert('Ride Cancelled', 'The passenger cancelled the request.', [
-            { text: 'OK', onPress: () => router.replace('/(tabs)/home') }
-          ]);
+    let watchSubscription: Location.LocationSubscription | null = null;
+
+    const startTracking = async () => {
+      const { status: perm } = await Location.requestForegroundPermissionsAsync();
+      if (perm !== 'granted') return;
+
+      watchSubscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.BestForNavigation,
+          timeInterval: 2000,
+          distanceInterval: 5,
+        },
+        (loc) => {
+          const newPos = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+          setDriverPos(newPos);
+
+          if (loc.coords.heading !== null && loc.coords.heading >= 0) {
+            setHeading(loc.coords.heading);
+
+            // Auto Layout Camera snapping 45-60° Pitch tracking
+            mapRef.current?.animateCamera(
+              {
+                center: newPos,
+                pitch: 55, // Bird's Eye View
+                heading: loc.coords.heading,
+                altitude: 300,
+                zoom: 18,
+              },
+              { duration: 1500 }
+            );
+          }
         }
+      );
+    };
+
+    startTracking();
+
+    const handleStatusUpdate = (data: { rideId: string; status: string }) => {
+      if (data.rideId === rideId && data.status === 'Cancelled') {
+        Alert.alert('Ride Cancelled', 'The passenger cancelled the request.', [
+          { text: 'OK', onPress: () => router.replace('/(tabs)/home') }
+        ]);
       }
     };
+
     driverSocket.on('rideStatusUpdate', handleStatusUpdate);
     driverSocket.on('rideCancelled', handleStatusUpdate);
+
     return () => {
+      watchSubscription?.remove();
       driverSocket.off('rideStatusUpdate', handleStatusUpdate);
       driverSocket.off('rideCancelled', handleStatusUpdate);
     };
-  }, [rideId, router]); // Fix exhaustive-deps
+  }, [rideId, router]);
 
   // ── Actions ─────────────────────────────────────────────────────────────
   const handleArrived = () => {
@@ -173,7 +217,7 @@ export default function ActiveRideScreen() {
 
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setStatus('Arrived');
-    setNavigationPhase('to_destination');
+    setRidePhase('TRIP');
     setProcessing(false);
   };
 
@@ -197,13 +241,9 @@ export default function ActiveRideScreen() {
     ]);
   };
 
-  // ── Call passenger helper ───────────────────────────────────────────────
   const callPassenger = () => {
     Alert.alert('Call Passenger', 'Calling passenger...');
   };
-
-  // ── Render ──────────────────────────────────────────────────────────────
-  const isAccepted = status === 'Accepted';
 
   return (
     <View style={styles.container}>
@@ -219,54 +259,58 @@ export default function ActiveRideScreen() {
         loadingBackgroundColor="#EAE6DF"
         loadingIndicatorColor="#169F95"
         initialRegion={{
-          latitude: pickup.latitude || 6.9271,
-          longitude: pickup.longitude || 79.8612,
+          latitude: pickupLocation.latitude || 6.9271,
+          longitude: pickupLocation.longitude || 79.8612,
           latitudeDelta: 0.05,
           longitudeDelta: 0.05,
         }}>
         <UrlTile urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maximumZ={19} flipY={false} />
 
-        {/* Driver marker */}
-        <Marker coordinate={driverPos} anchor={{ x: 0.5, y: 0.5 }} zIndex={5}>
+        {/* Driver marker (Car) */}
+        <Marker coordinate={driverPos} anchor={{ x: 0.5, y: 0.5 }} zIndex={5} rotation={heading}>
           <View style={styles.driverCarMarker}>
             <Ionicons name="car-sport" size={20} color="#FFF" />
           </View>
         </Marker>
 
-        {/* Pickup marker */}
-        {navigationPhase === 'to_pickup' && (
-          <Marker coordinate={pickup} anchor={{ x: 0.5, y: 1 }} zIndex={4}>
+        {/* Pickup marker (Person) */}
+        {ridePhase === 'PICKUP' && (
+          <Marker coordinate={pickupLocation} anchor={{ x: 0.5, y: 1 }} zIndex={4}>
             <View style={styles.premiumDestMarker}>
-              <View style={[styles.premiumDot, { backgroundColor: teal }]} />
+              <View style={[styles.premiumIconWrap, { backgroundColor: teal }]}>
+                <Ionicons name="person" size={14} color="#FFF" />
+              </View>
               <Text style={styles.markerText} numberOfLines={1}>{pName || 'Pickup'}</Text>
             </View>
             <View style={[styles.premiumPointer, { borderTopColor: teal }]} />
           </Marker>
         )}
 
-        {/* Dropoff marker */}
-        {navigationPhase === 'to_destination' && (
-          <Marker coordinate={dropoff} anchor={{ x: 0.5, y: 1 }} zIndex={4}>
+        {/* Dropoff marker (Flag) */}
+        {ridePhase === 'TRIP' && (
+          <Marker coordinate={dropoffLocation} anchor={{ x: 0.5, y: 1 }} zIndex={4}>
             <View style={styles.premiumDestMarker}>
-              <View style={[styles.premiumDot, { backgroundColor: '#1A365D' }]} />
+              <View style={[styles.premiumIconWrap, { backgroundColor: '#1A365D' }]}>
+                <Ionicons name="flag" size={14} color="#FFF" />
+              </View>
               <Text style={styles.markerText} numberOfLines={1}>{dName || 'Drop-off'}</Text>
             </View>
             <View style={[styles.premiumPointer, { borderTopColor: '#1A365D' }]} />
           </Marker>
         )}
 
-        {/* Route polyline (Sliced to hide traveled distance dynamically) */}
+        {/* Sliced Dynamic Route Polyline */}
         {slicedRouteCoords.length > 0 && (
           <>
             <Polyline
               coordinates={slicedRouteCoords}
-              strokeColor={navigationPhase === 'to_pickup' ? '#017270' : '#0B2347'}
+              strokeColor={ridePhase === 'PICKUP' ? '#017270' : '#0B2347'}
               strokeWidth={9}
               lineJoin="round" lineCap="round" zIndex={2}
             />
             <Polyline
               coordinates={slicedRouteCoords}
-              strokeColor={navigationPhase === 'to_pickup' ? teal : '#1E40AF'}
+              strokeColor={ridePhase === 'PICKUP' ? teal : '#1E40AF'}
               strokeWidth={5}
               lineJoin="round" lineCap="round" zIndex={3}
             />
@@ -277,7 +321,7 @@ export default function ActiveRideScreen() {
       {/* ── Top bar ── */}
       <SafeAreaView style={styles.topSafe}>
         <View style={styles.statusPillTop}>
-          <View style={[styles.statusDotPulse, { backgroundColor: navigationPhase === 'to_pickup' ? teal : '#1E40AF' }]} />
+          <View style={[styles.statusDotPulse, { backgroundColor: ridePhase === 'PICKUP' ? teal : '#1E40AF' }]} />
           <Text style={styles.statusPillText}>
             {status === 'Accepted' ? 'En route to pickup' : status === 'Arrived' ? 'At Pickup' : 'Heading to destination'}
           </Text>
@@ -295,7 +339,6 @@ export default function ActiveRideScreen() {
           </View>
         ) : (
           <>
-            {/* Passenger Header */}
             <View style={styles.passengerHeaderRow}>
               <View style={styles.passengerAvatar}>
                 <Ionicons name="person" size={24} color="#FFF" />
@@ -310,10 +353,9 @@ export default function ActiveRideScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Stat chips */}
             <View style={styles.statsRow}>
-              <StatChip icon="map-pin" label="Distance" value={distance} color={isAccepted ? '#27AE60' : teal} />
-              <StatChip icon="clock" label="ETA" value={duration} color={isAccepted ? '#27AE60' : teal} />
+              <StatChip icon="map-pin" label="Distance" value={distance} color={status === 'Accepted' ? '#017270' : '#1A365D'} />
+              <StatChip icon="clock" label="ETA" value={duration} color={status === 'Accepted' ? '#017270' : '#1A365D'} />
             </View>
 
             {/* Actions */}
@@ -409,7 +451,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2, shadowRadius: 10, elevation: 8, maxWidth: 200,
     borderWidth: 2, borderColor: '#FFF',
   },
-  premiumDot: { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
+  premiumIconWrap: { width: 22, height: 22, borderRadius: 11, marginRight: 8, alignItems: 'center', justifyContent: 'center' },
   markerText: { fontSize: 13, fontWeight: '900', color: '#102A28' },
   premiumPointer: {
     width: 0, height: 0, backgroundColor: 'transparent',
@@ -422,7 +464,7 @@ const styles = StyleSheet.create({
   sheet: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 36, borderTopRightRadius: 36,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
     padding: 24, paddingBottom: Platform.OS === 'ios' ? 36 : 28,
     shadowColor: '#000', shadowOffset: { width: 0, height: -12 },
     shadowOpacity: 0.1, shadowRadius: 28, elevation: 24,
