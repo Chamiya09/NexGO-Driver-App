@@ -20,6 +20,10 @@ export function safeBearing(previous: LatLng | null, current: LatLng, fallback: 
 export function sliceRemainingPolyline(route: LatLng[], current: LatLng): LatLng[] {
   if (!route.length) return [];
   const nearest = geolib.findNearest(current, route) as LatLng;
+  const distance = geolib.getDistance(current, nearest);
+
+  if (distance > 50) return route;
+
   const nearestIndex = route.findIndex(
     (point) => point.latitude === nearest.latitude && point.longitude === nearest.longitude
   );

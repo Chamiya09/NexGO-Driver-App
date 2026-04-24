@@ -10,12 +10,13 @@ import {
   Text,
   UIManager,
   View,
+  Animated,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
-import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
+import MapView, { Marker, Polyline, UrlTile, AnimatedRegion } from 'react-native-maps';
 import MapViewDirections, { MapViewDirectionsRoute } from 'react-native-maps-directions';
 import { Ionicons } from '@expo/vector-icons';
 import driverSocket from '@/lib/driverSocket';
@@ -117,7 +118,18 @@ export default function DriverActiveRideScreen() {
     [params.drLat, params.drLng, params.pLat, params.pLng]
   );
 
+  const [isRouteFetched, setIsRouteFetched] = useState(false);
   const [driverPosition, setDriverPosition] = useState<LatLng>(initialDriverPosition);
+
+  const animatedDrCoords = useRef(new AnimatedRegion({
+    latitude: initialDriverPosition.latitude,
+    longitude: initialDriverPosition.longitude,
+    latitudeDelta: 0.05,
+    longitudeDelta: 0.05,
+  })).current;
+
+  const headingAnim = useRef(new Animated.Value(0)).current;
+
   const [actionStatus, setActionStatus] = useState<RideActionStatus>(normalizeStatus(params.status));
   const [routeCoordinates, setRouteCoordinates] = useState<LatLng[]>([]);
   const [remainingRoute, setRemainingRoute] = useState<LatLng[]>([]);
@@ -151,6 +163,7 @@ export default function DriverActiveRideScreen() {
         setRemainingRoute(sliceRemainingPolyline(fallback.coordinates, driverPosition));
         setDistanceLabel(formatDistance(fallback.distanceMeters));
         setDurationLabel(formatDuration(fallback.durationSeconds));
+        setIsRouteFetched(true);
       } catch (error) {
         console.error('[ActiveRide] fallback route failed:', error);
       } finally {
@@ -158,7 +171,9 @@ export default function DriverActiveRideScreen() {
       }
     };
 
-    hydrateFallback();
+    if (!isRouteFetched) {
+      hydrateFallback();
+    }
 
     return () => {
       active = false;
@@ -189,6 +204,24 @@ export default function DriverActiveRideScreen() {
 
           setDriverPosition(next);
           setCameraHeading(heading);
+
+          animatedDrCoords.timing({
+            latitude: next.latitude,
+            longitude: next.longitude,
+            useNativeDriver: false,
+            duration: 1000
+          }).start();
+
+          let currentH = (headingAnim as any)._value || 0;
+          let diff = heading - currentH;
+          if (diff > 180) diff -= 360;
+          if (diff < -180) diff += 360;
+
+          Animated.timing(headingAnim, {
+            toValue: currentH + diff,
+            duration: 1000,
+            useNativeDriver: true,
+          }).start();
 
           mapRef.current?.animateCamera(
             {
@@ -258,6 +291,7 @@ export default function DriverActiveRideScreen() {
     setDistanceLabel(formatDistance(result.distance * 1000));
     setDurationLabel(formatDuration(result.duration * 60));
     setIsLoadingRoute(false);
+    setIsRouteFetched(true);
   };
 
   const transitionRide = (eventName: 'driver_arrived' | 'start_trip' | 'complete_trip', optimistic: RideActionStatus) => {
@@ -318,7 +352,7 @@ export default function DriverActiveRideScreen() {
         }}>
         <UrlTile urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maximumZ={19} flipY={false} />
 
-        {!!googleApiKey && (
+        {!isRouteFetched && !!googleApiKey && (
           <MapViewDirections
             origin={origin}
             destination={destination}
@@ -334,6 +368,7 @@ export default function DriverActiveRideScreen() {
               setDistanceLabel(formatDistance(fallback.distanceMeters));
               setDurationLabel(formatDuration(fallback.durationSeconds));
               setIsLoadingRoute(false);
+              setIsRouteFetched(true);
             }}
           />
         )}
@@ -345,11 +380,18 @@ export default function DriverActiveRideScreen() {
           </>
         )}
 
-        <Marker coordinate={driverPosition} anchor={{ x: 0.5, y: 0.5 }} rotation={cameraHeading} flat>
-          <View style={styles.markerBubble}>
+        <Marker.Animated coordinate={animatedDrCoords as any} anchor={{ x: 0.5, y: 0.5 }} flat>
+          <Animated.View style={[styles.markerBubble, {
+            transform: [{
+              rotate: headingAnim.interpolate({
+                inputRange: [0, 360],
+                outputRange: ['0deg', '360deg']
+              })
+            }]
+          }]}>
             <Image source={require('@/assets/images/icon.png')} style={styles.driverAsset} />
-          </View>
-        </Marker>
+          </Animated.View>
+        </Marker.Animated>
 
         {stage === 'TO_PICKUP' && (
           <Marker coordinate={pickup} anchor={{ x: 0.5, y: 1 }}>
