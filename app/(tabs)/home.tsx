@@ -195,7 +195,10 @@ export default function DriverHomeScreen() {
         <MapView
           ref={mapRef}
           style={StyleSheet.absoluteFillObject}
-          mapType={Platform.OS === 'android' ? 'none' : 'standard'}
+          mapType="none"
+          loadingEnabled={true}
+          loadingBackgroundColor="#EAE6DF"
+          loadingIndicatorColor="#169F95"
           showsUserLocation={false}
           showsMyLocationButton={false}
           initialRegion={{

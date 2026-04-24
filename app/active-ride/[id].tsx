@@ -174,7 +174,10 @@ export default function ActiveRideScreen() {
       <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFillObject}
-        mapType={Platform.OS === 'android' ? 'none' : 'standard'}
+        mapType="none"
+        loadingEnabled={true}
+        loadingBackgroundColor="#EAE6DF"
+        loadingIndicatorColor="#169F95"
         initialRegion={{
           latitude: pickup.latitude || 6.9271,
           longitude: pickup.longitude || 79.8612,
