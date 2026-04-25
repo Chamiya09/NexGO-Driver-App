@@ -17,7 +17,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import MapView, { Marker, Polyline, UrlTile, AnimatedRegion } from 'react-native-maps';
-import MapViewDirections, { MapViewDirectionsRoute } from 'react-native-maps-directions';
+import MapViewDirections from 'react-native-maps-directions';
 import { Ionicons } from '@expo/vector-icons';
 import driverSocket from '@/lib/driverSocket';
 import { useDriverAuth } from '@/context/driver-auth-context';
@@ -38,6 +38,12 @@ const TEAL = '#008080';
 const DEEP_BLUE = '#114B7A';
 
 type RideActionStatus = 'ACCEPTED' | 'ARRIVED' | 'IN_TRANSIT';
+
+type DirectionsResult = {
+  coordinates: LatLng[];
+  distance: number;
+  duration: number;
+};
 
 type RideParams = {
   id?: string;
@@ -178,7 +184,7 @@ export default function DriverActiveRideScreen() {
     return () => {
       active = false;
     };
-  }, [googleApiKey, origin, destination, driverPosition]);
+  }, [googleApiKey, origin, destination, driverPosition, isRouteFetched]);
 
   useEffect(() => {
     let locationSub: Location.LocationSubscription | null = null;
@@ -210,7 +216,7 @@ export default function DriverActiveRideScreen() {
             longitude: next.longitude,
             useNativeDriver: false,
             duration: 1000
-          }).start();
+          } as Parameters<typeof animatedDrCoords.timing>[0]).start();
 
           let currentH = (headingAnim as any)._value || 0;
           let diff = heading - currentH;
@@ -282,10 +288,10 @@ export default function DriverActiveRideScreen() {
       driverSocket.off('rideCancelled', handleStatusUpdate);
       driverSocket.off('rideError', handleRideError);
     };
-  }, [cameraHeading, driver?.id, rideId, router]);
+  }, [animatedDrCoords, cameraHeading, driver?.id, headingAnim, rideId, router]);
 
-  const onDirectionsReady = (result: MapViewDirectionsRoute) => {
-    const coordinates = result.coordinates as LatLng[];
+  const onDirectionsReady = (result: DirectionsResult) => {
+    const coordinates = result.coordinates;
     setRouteCoordinates(coordinates);
     setRemainingRoute(sliceRemainingPolyline(coordinates, driverPosition));
     setDistanceLabel(formatDistance(result.distance * 1000));

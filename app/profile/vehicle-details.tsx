@@ -284,28 +284,50 @@ export default function DriverVehicleDetailsScreen() {
           ) : vehicle ? (
             <>
               <Text style={styles.sectionTitle}>SAVED VEHICLE</Text>
-              <View style={styles.groupCard}>
-                <View style={styles.savedActionsRow}>
+              <View style={styles.vehicleCard}>
+                <View style={styles.vehicleCardHeader}>
+                  <View style={styles.vehicleHeaderLeft}>
+                    <View style={styles.vehicleIconBadge}>
+                      <Ionicons name="car-sport-outline" size={24} color={teal} />
+                    </View>
+
+                    <View style={styles.vehicleTitleWrap}>
+                      <Text style={styles.vehicleName}>{`${vehicle.make} ${vehicle.model}`}</Text>
+                      <View style={styles.vehicleMetaRow}>
+                        <View style={styles.vehicleCategoryChip}>
+                          <Text style={styles.vehicleCategoryText}>{vehicle.category}</Text>
+                        </View>
+                        <Text style={styles.vehicleMetaText}>{vehicle.color}</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={styles.vehiclePlateBadge}>
+                    <Text style={styles.vehiclePlateLabel}>PLATE</Text>
+                    <Text style={styles.vehiclePlateText}>{vehicle.plateNumber}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.vehicleStatsGrid}>
+                  <VehicleStat icon="calendar-outline" label="Year" value={String(vehicle.year)} />
+                  <VehicleStat icon="people-outline" label="Seats" value={String(vehicle.seats)} />
+                  <VehicleStat icon="color-palette-outline" label="Color" value={vehicle.color} />
+                </View>
+
+                <View style={styles.vehicleActionsRow}>
                   <Pressable style={styles.editButton} onPress={openEditModal}>
-                    <Ionicons name="create-outline" size={15} color={teal} />
-                    <Text style={styles.editButtonText}>Edit</Text>
+                    <Ionicons name="create-outline" size={16} color={teal} />
+                    <Text style={styles.editButtonText}>Edit Vehicle</Text>
                   </Pressable>
 
                   <Pressable
                     style={[styles.deleteVehicleButton, isDeletingVehicle && styles.deleteVehicleButtonDisabled]}
                     onPress={confirmDeleteVehicle}
                     disabled={isDeletingVehicle}>
-                    <Ionicons name="trash-outline" size={15} color="#C13B3B" />
+                    <Ionicons name="trash-outline" size={16} color="#C13B3B" />
                     <Text style={styles.deleteVehicleButtonText}>{isDeletingVehicle ? 'Deleting' : 'Delete'}</Text>
                   </Pressable>
                 </View>
-
-                <DetailRow label="Category" value={vehicle.category} />
-                <DetailRow label="Vehicle" value={`${vehicle.make} ${vehicle.model}`} />
-                <DetailRow label="Year" value={String(vehicle.year)} />
-                <DetailRow label="Plate number" value={vehicle.plateNumber} />
-                <DetailRow label="Color" value={vehicle.color} />
-                <DetailRow label="Passenger seats" value={String(vehicle.seats)} />
               </View>
             </>
           ) : null}
@@ -419,15 +441,23 @@ function mapVehicleToForm(vehicle?: DriverVehicle | null): VehicleForm {
   };
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+function VehicleStat({
+  icon,
+  label,
+  value,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+}) {
   return (
-    <>
-      <View style={styles.inlineDivider} />
-      <View style={styles.infoRow}>
-        <Text style={styles.infoLabel}>{label}</Text>
-        <Text style={styles.infoValue}>{value || 'Not set'}</Text>
+    <View style={styles.vehicleStatItem}>
+      <View style={styles.vehicleStatIcon}>
+        <Ionicons name={icon} size={15} color={teal} />
       </View>
-    </>
+      <Text style={styles.vehicleStatValue}>{value}</Text>
+      <Text style={styles.vehicleStatLabel}>{label}</Text>
+    </View>
   );
 }
 
@@ -710,47 +740,179 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
   },
-  savedActionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
-    marginBottom: 2,
+  vehicleCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#CFE4E0',
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+    marginBottom: 12,
   },
-  editButton: {
-    minHeight: 34,
-    borderRadius: 10,
+  vehicleCardHeader: {
+    padding: 14,
+    backgroundColor: '#F7FBFA',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  vehicleHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  vehicleIconBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#D9E9E6',
     backgroundColor: '#E7F5F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  vehicleTitleWrap: {
+    flex: 1,
+  },
+  vehicleName: {
+    color: '#102A28',
+    fontSize: 17,
+    fontWeight: '900',
+    marginBottom: 6,
+  },
+  vehicleMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+  },
+  vehicleCategoryChip: {
+    minHeight: 24,
+    borderRadius: 999,
+    backgroundColor: '#E7F5F3',
+    borderWidth: 1,
+    borderColor: '#CFE4E0',
     paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  vehicleCategoryText: {
+    color: teal,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  vehicleMetaText: {
+    color: '#617C79',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  vehiclePlateBadge: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    alignItems: 'center',
+    minWidth: 92,
+  },
+  vehiclePlateLabel: {
+    color: '#617C79',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+    marginBottom: 2,
+  },
+  vehiclePlateText: {
+    color: '#102A28',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  vehicleStatsGrid: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#D9E9E6',
+  },
+  vehicleStatItem: {
+    flex: 1,
+    minHeight: 76,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#F7FBFA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  vehicleStatIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    backgroundColor: '#E7F5F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 5,
+  },
+  vehicleStatValue: {
+    color: '#102A28',
+    fontSize: 13,
+    fontWeight: '900',
+    textAlign: 'center',
+    marginBottom: 1,
+  },
+  vehicleStatLabel: {
+    color: '#617C79',
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  vehicleActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+  },
+  editButton: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#CFE4E0',
+    backgroundColor: '#E7F5F3',
+    paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
+    gap: 6,
   },
   editButtonText: {
     color: teal,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '800',
   },
   deleteVehicleButton: {
-    minHeight: 34,
-    borderRadius: 10,
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#F1D6D6',
     backgroundColor: '#FFF4F4',
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
+    gap: 6,
   },
   deleteVehicleButtonDisabled: {
     opacity: 0.6,
   },
   deleteVehicleButtonText: {
     color: '#C13B3B',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '800',
   },
   primaryButtonText: {
@@ -839,30 +1001,5 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '800',
-  },
-  inlineDivider: {
-    height: 1,
-    backgroundColor: '#D9E9E6',
-    marginVertical: 10,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 16,
-    minHeight: 22,
-  },
-  infoLabel: {
-    color: '#617C79',
-    fontSize: 12,
-    fontWeight: '700',
-    flexShrink: 0,
-  },
-  infoValue: {
-    color: '#102A28',
-    fontSize: 14,
-    fontWeight: '700',
-    flex: 1,
-    textAlign: 'right',
   },
 });
