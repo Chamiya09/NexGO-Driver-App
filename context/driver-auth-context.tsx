@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useCallback, useContext, useState } from 'react';
 
 import { API_BASE_URL, parseApiResponse } from '@/lib/api';
 import { clearDriverToken, setDriverToken } from '@/lib/driver-session';
@@ -82,6 +82,10 @@ type DriverResponse = {
   driver: DriverProfile;
 };
 
+type VehicleResponse = {
+  vehicle: DriverVehicle | null;
+};
+
 type DriverAuthContextValue = {
   driver: DriverProfile | null;
   token: string | null;
@@ -90,6 +94,7 @@ type DriverAuthContextValue = {
   register: (payload: RegisterPayload) => Promise<void>;
   updateProfile: (payload: UpdateProfilePayload) => Promise<void>;
   changePassword: (payload: ChangePasswordPayload) => Promise<void>;
+  getVehicle: () => Promise<DriverVehicle | null>;
   createVehicle: (payload: CreateVehiclePayload) => Promise<void>;
   updateDocument: (documentType: DriverDocument['documentType'], fileUrl: string) => Promise<void>;
   updateSecurity: (twoStepVerificationEnabled: boolean) => Promise<void>;
@@ -222,6 +227,33 @@ export function DriverAuthProvider({ children }: { children: React.ReactNode }) 
     setDriver(data.driver);
   };
 
+  const getVehicle = useCallback(async () => {
+    if (!token) {
+      throw new Error('Please sign in again.');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/driver-auth/me/vehicle`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const data = await parseApiResponse<VehicleResponse>(response);
+    setDriver((currentDriver) => {
+      if (!currentDriver) {
+        return currentDriver;
+      }
+
+      return {
+        ...currentDriver,
+        vehicle: data.vehicle,
+      };
+    });
+
+    return data.vehicle;
+  }, [token]);
+
   const createVehicle = async (payload: CreateVehiclePayload) => {
     const nextToken = requireToken();
     const response = await fetch(`${API_BASE_URL}/driver-auth/me/vehicle`, {
@@ -266,6 +298,7 @@ export function DriverAuthProvider({ children }: { children: React.ReactNode }) 
     register,
     updateProfile,
     changePassword,
+    getVehicle,
     createVehicle,
     updateDocument,
     updateSecurity,

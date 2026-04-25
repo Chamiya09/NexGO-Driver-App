@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -45,9 +45,10 @@ const initialVehicleForm: VehicleForm = {
 };
 
 export default function DriverVehicleDetailsScreen() {
-  const { driver, createVehicle } = useDriverAuth();
+  const { driver, createVehicle, getVehicle } = useDriverAuth();
   const [form, setForm] = useState<VehicleForm>(initialVehicleForm);
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
+  const [isVehicleLoading, setIsVehicleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const vehicle = driver?.vehicle || null;
@@ -68,6 +69,26 @@ export default function DriverVehicleDetailsScreen() {
       [field]: value,
     }));
   };
+
+  const loadVehicle = useCallback(async ({ showSuccess = false }: { showSuccess?: boolean } = {}) => {
+    setIsVehicleLoading(true);
+    setErrorMessage(null);
+
+    try {
+      await getVehicle();
+      if (showSuccess) {
+        setSuccessMessage('Vehicle details refreshed.');
+      }
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to load vehicle details.');
+    } finally {
+      setIsVehicleLoading(false);
+    }
+  }, [getVehicle]);
+
+  useEffect(() => {
+    loadVehicle();
+  }, [loadVehicle]);
 
   const openAddModal = () => {
     setForm(vehicleForm);
@@ -191,16 +212,29 @@ export default function DriverVehicleDetailsScreen() {
               </View>
             </View>
 
-            <Pressable
-              style={[styles.primaryButton, vehicle && styles.primaryButtonDisabled]}
-              onPress={openAddModal}
-              disabled={Boolean(vehicle)}>
-              <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
-              <Text style={styles.primaryButtonText}>{vehicle ? 'Vehicle Already Added' : 'Add Vehicle'}</Text>
-            </Pressable>
+            <View style={styles.actionRow}>
+              <Pressable
+                style={[styles.primaryButton, vehicle && styles.primaryButtonDisabled]}
+                onPress={openAddModal}
+                disabled={Boolean(vehicle)}>
+                <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
+                <Text style={styles.primaryButtonText}>{vehicle ? 'Vehicle Added' : 'Add Vehicle'}</Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.refreshButton, isVehicleLoading && styles.refreshButtonDisabled]}
+                onPress={() => loadVehicle({ showSuccess: true })}
+                disabled={isVehicleLoading}>
+                <Ionicons name="refresh" size={18} color={teal} />
+              </Pressable>
+            </View>
           </View>
 
-          {vehicle ? (
+          {isVehicleLoading ? (
+            <View style={styles.groupCard}>
+              <Text style={styles.loadingText}>Loading vehicle details...</Text>
+            </View>
+          ) : vehicle ? (
             <>
               <Text style={styles.sectionTitle}>SAVED VEHICLE</Text>
               <View style={styles.groupCard}>
@@ -568,6 +602,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   primaryButton: {
+    flex: 1,
     minHeight: 46,
     borderRadius: 12,
     backgroundColor: teal,
@@ -579,6 +614,30 @@ const styles = StyleSheet.create({
   },
   primaryButtonDisabled: {
     backgroundColor: '#8FA6A3',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  refreshButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#E7F5F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  refreshButtonDisabled: {
+    opacity: 0.55,
+  },
+  loadingText: {
+    color: '#617C79',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   primaryButtonText: {
     color: '#FFFFFF',
