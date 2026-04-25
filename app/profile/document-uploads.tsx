@@ -15,7 +15,12 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { type DriverDocument as SavedDriverDocument, useDriverAuth } from '@/context/driver-auth-context';
-import { pickDriverDocument } from '@/src/utils/documentPicker';
+import {
+  captureDriverDocumentImage,
+  pickDriverImage,
+  pickDriverPdf,
+  type PickedDriverDocument,
+} from '@/src/utils/documentPicker';
 import { uploadFileToCloudinary } from '@/src/utils/fileUpload';
 
 const teal = '#008080';
@@ -112,18 +117,12 @@ export default function DriverDocumentUploadsScreen() {
     setDocuments(buildDocumentsFromDriver(driver?.documents));
   }, [driver?.documents]);
 
-  const handleUpload = async (documentId: DriverDocumentType) => {
-    if (documentId === 'registration') {
-      Alert.alert('Coming next', 'Vehicle Registration upload will be wired in the next step.');
+  const submitPickedDocument = async (documentId: DriverDocumentType, pickedDocument: PickedDriverDocument | null) => {
+    if (!pickedDocument) {
       return;
     }
 
     try {
-      const pickedDocument = await pickDriverDocument();
-      if (!pickedDocument) {
-        return;
-      }
-
       setUploadingDocumentId(documentId);
 
       const fileUrl = await uploadFileToCloudinary(pickedDocument);
@@ -147,6 +146,33 @@ export default function DriverDocumentUploadsScreen() {
     } finally {
       setUploadingDocumentId(null);
     }
+  };
+
+  const handleUpload = async (documentId: DriverDocumentType) => {
+    Alert.alert('Upload document', 'Choose how you want to add this document.', [
+      {
+        text: 'Upload PDF',
+        onPress: async () => {
+          const pickedDocument = await pickDriverPdf();
+          await submitPickedDocument(documentId, pickedDocument);
+        },
+      },
+      {
+        text: 'Upload Image',
+        onPress: async () => {
+          const pickedDocument = await pickDriverImage();
+          await submitPickedDocument(documentId, pickedDocument);
+        },
+      },
+      {
+        text: 'Use Camera',
+        onPress: async () => {
+          const pickedDocument = await captureDriverDocumentImage();
+          await submitPickedDocument(documentId, pickedDocument);
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
   return (
