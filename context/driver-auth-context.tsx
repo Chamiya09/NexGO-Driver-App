@@ -73,6 +73,8 @@ type CreateVehiclePayload = {
   seats: number;
 };
 
+type UpdateVehiclePayload = CreateVehiclePayload;
+
 type AuthResponse = {
   token: string;
   driver: DriverProfile;
@@ -96,6 +98,8 @@ type DriverAuthContextValue = {
   changePassword: (payload: ChangePasswordPayload) => Promise<void>;
   getVehicle: () => Promise<DriverVehicle | null>;
   createVehicle: (payload: CreateVehiclePayload) => Promise<void>;
+  updateVehicle: (payload: UpdateVehiclePayload) => Promise<void>;
+  deleteVehicle: () => Promise<void>;
   updateDocument: (documentType: DriverDocument['documentType'], fileUrl: string) => Promise<void>;
   updateSecurity: (twoStepVerificationEnabled: boolean) => Promise<void>;
   logout: () => void;
@@ -269,6 +273,34 @@ export function DriverAuthProvider({ children }: { children: React.ReactNode }) 
     setDriver(data.driver);
   };
 
+  const updateVehicle = async (payload: UpdateVehiclePayload) => {
+    const nextToken = requireToken();
+    const response = await fetch(`${API_BASE_URL}/driver-auth/me/vehicle`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${nextToken}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await parseApiResponse<DriverResponse>(response);
+    setDriver(data.driver);
+  };
+
+  const deleteVehicle = async () => {
+    const nextToken = requireToken();
+    const response = await fetch(`${API_BASE_URL}/driver-auth/me/vehicle`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${nextToken}`,
+      },
+    });
+
+    const data = await parseApiResponse<DriverResponse>(response);
+    setDriver(data.driver);
+  };
+
   const updateSecurity = async (twoStepVerificationEnabled: boolean) => {
     const nextToken = requireToken();
     const response = await fetch(`${API_BASE_URL}/driver-auth/me/security`, {
@@ -300,6 +332,8 @@ export function DriverAuthProvider({ children }: { children: React.ReactNode }) 
     changePassword,
     getVehicle,
     createVehicle,
+    updateVehicle,
+    deleteVehicle,
     updateDocument,
     updateSecurity,
     logout,

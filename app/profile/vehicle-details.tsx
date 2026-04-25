@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -34,6 +35,8 @@ type VehicleForm = {
   seats: string;
 };
 
+type VehicleModalMode = 'add' | 'edit';
+
 const initialVehicleForm: VehicleForm = {
   category: 'Car',
   make: '',
@@ -45,10 +48,13 @@ const initialVehicleForm: VehicleForm = {
 };
 
 export default function DriverVehicleDetailsScreen() {
-  const { driver, createVehicle, getVehicle } = useDriverAuth();
+  const { driver, createVehicle, updateVehicle, deleteVehicle, getVehicle } = useDriverAuth();
   const [form, setForm] = useState<VehicleForm>(initialVehicleForm);
-  const [isAddModalVisible, setIsAddModalVisible] = useState(false);
+  const [modalMode, setModalMode] = useState<VehicleModalMode>('add');
+  const [isVehicleModalVisible, setIsVehicleModalVisible] = useState(false);
   const [isVehicleLoading, setIsVehicleLoading] = useState(false);
+  const [isSavingVehicle, setIsSavingVehicle] = useState(false);
+  const [isDeletingVehicle, setIsDeletingVehicle] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const vehicle = driver?.vehicle || null;
@@ -91,14 +97,23 @@ export default function DriverVehicleDetailsScreen() {
   }, [loadVehicle]);
 
   const openAddModal = () => {
+    setModalMode('add');
+    setForm(initialVehicleForm);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setIsVehicleModalVisible(true);
+  };
+
+  const openEditModal = () => {
+    setModalMode('edit');
     setForm(vehicleForm);
     setErrorMessage(null);
     setSuccessMessage(null);
-    setIsAddModalVisible(true);
+    setIsVehicleModalVisible(true);
   };
 
-  const closeAddModal = () => {
-    setIsAddModalVisible(false);
+  const closeVehicleModal = () => {
+    setIsVehicleModalVisible(false);
   };
 
   const handleSaveVehicle = async () => {
@@ -139,7 +154,8 @@ export default function DriverVehicleDetailsScreen() {
     }
 
     try {
-      await createVehicle({
+      setIsSavingVehicle(true);
+      const payload = {
         category: nextVehicle.category,
         make: nextVehicle.make,
         model: nextVehicle.model,
@@ -147,15 +163,49 @@ export default function DriverVehicleDetailsScreen() {
         plateNumber: nextVehicle.plateNumber,
         color: nextVehicle.color,
         seats: Number(nextVehicle.seats),
-      });
+      };
+
+      if (modalMode === 'edit') {
+        await updateVehicle(payload);
+      } else {
+        await createVehicle(payload);
+      }
+
       setForm(nextVehicle);
       setErrorMessage(null);
-      setSuccessMessage('Vehicle details added successfully.');
-      setIsAddModalVisible(false);
+      setSuccessMessage(modalMode === 'edit' ? 'Vehicle details updated successfully.' : 'Vehicle details added successfully.');
+      setIsVehicleModalVisible(false);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to add vehicle details.');
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to save vehicle details.');
       setSuccessMessage(null);
+    } finally {
+      setIsSavingVehicle(false);
     }
+  };
+
+  const confirmDeleteVehicle = () => {
+    Alert.alert('Delete vehicle', 'Do you want to remove this vehicle from your driver profile?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          setIsDeletingVehicle(true);
+          setErrorMessage(null);
+          setSuccessMessage(null);
+
+          try {
+            await deleteVehicle();
+            setForm(initialVehicleForm);
+            setSuccessMessage('Vehicle details deleted successfully.');
+          } catch (error) {
+            setErrorMessage(error instanceof Error ? error.message : 'Unable to delete vehicle details.');
+          } finally {
+            setIsDeletingVehicle(false);
+          }
+        },
+      },
+    ]);
   };
 
   return (
@@ -188,7 +238,7 @@ export default function DriverVehicleDetailsScreen() {
               <Text style={styles.heroBadgeText}>{vehicle ? 'Vehicle added' : 'Create vehicle record'}</Text>
             </View>
 
-            <Text style={styles.heroHint}>This step captures the first vehicle profile only. Edit, delete, and list management can come next.</Text>
+            <Text style={styles.heroHint}>Add, review, update, or remove the vehicle connected to this driver account.</Text>
           </View>
 
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
@@ -206,17 +256,14 @@ export default function DriverVehicleDetailsScreen() {
                 <Text style={styles.detailsTitle}>{vehicle ? 'Vehicle record added' : 'No vehicle added yet'}</Text>
                 <Text style={styles.detailsHint}>
                   {vehicle
-                    ? 'Your first vehicle record is ready for the next vehicle management step.'
+                    ? 'You can update or remove this vehicle record from the saved details section.'
                     : 'Add your assigned vehicle before accepting passenger trips.'}
                 </Text>
               </View>
             </View>
 
             <View style={styles.actionRow}>
-              <Pressable
-                style={[styles.primaryButton, vehicle && styles.primaryButtonDisabled]}
-                onPress={openAddModal}
-                disabled={Boolean(vehicle)}>
+              <Pressable style={[styles.primaryButton, vehicle && styles.primaryButtonDisabled]} onPress={openAddModal} disabled={Boolean(vehicle)}>
                 <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
                 <Text style={styles.primaryButtonText}>{vehicle ? 'Vehicle Added' : 'Add Vehicle'}</Text>
               </Pressable>
@@ -238,6 +285,21 @@ export default function DriverVehicleDetailsScreen() {
             <>
               <Text style={styles.sectionTitle}>SAVED VEHICLE</Text>
               <View style={styles.groupCard}>
+                <View style={styles.savedActionsRow}>
+                  <Pressable style={styles.editButton} onPress={openEditModal}>
+                    <Ionicons name="create-outline" size={15} color={teal} />
+                    <Text style={styles.editButtonText}>Edit</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={[styles.deleteVehicleButton, isDeletingVehicle && styles.deleteVehicleButtonDisabled]}
+                    onPress={confirmDeleteVehicle}
+                    disabled={isDeletingVehicle}>
+                    <Ionicons name="trash-outline" size={15} color="#C13B3B" />
+                    <Text style={styles.deleteVehicleButtonText}>{isDeletingVehicle ? 'Deleting' : 'Delete'}</Text>
+                  </Pressable>
+                </View>
+
                 <DetailRow label="Category" value={vehicle.category} />
                 <DetailRow label="Vehicle" value={`${vehicle.make} ${vehicle.model}`} />
                 <DetailRow label="Year" value={String(vehicle.year)} />
@@ -250,7 +312,7 @@ export default function DriverVehicleDetailsScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <Modal visible={isAddModalVisible} transparent animationType="fade" onRequestClose={closeAddModal}>
+      <Modal visible={isVehicleModalVisible} transparent animationType="fade" onRequestClose={closeVehicleModal}>
         <View style={styles.modalOverlay}>
           <KeyboardAvoidingView style={styles.modalKeyboardWrap} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <ScrollView
@@ -260,11 +322,15 @@ export default function DriverVehicleDetailsScreen() {
               <View style={styles.modalCard}>
                 <View style={styles.modalHeader}>
                   <View>
-                    <Text style={styles.modalTitle}>Add Vehicle</Text>
-                    <Text style={styles.modalSubtitle}>Enter the vehicle assigned to this driver profile.</Text>
+                    <Text style={styles.modalTitle}>{modalMode === 'edit' ? 'Update Vehicle' : 'Add Vehicle'}</Text>
+                    <Text style={styles.modalSubtitle}>
+                      {modalMode === 'edit'
+                        ? 'Change the vehicle assigned to this driver profile.'
+                        : 'Enter the vehicle assigned to this driver profile.'}
+                    </Text>
                   </View>
 
-                  <Pressable style={styles.closeButton} onPress={closeAddModal}>
+                  <Pressable style={styles.closeButton} onPress={closeVehicleModal}>
                     <Ionicons name="close" size={20} color="#102A28" />
                   </Pressable>
                 </View>
@@ -315,12 +381,17 @@ export default function DriverVehicleDetailsScreen() {
                 />
 
                 <View style={styles.modalActions}>
-                  <Pressable style={styles.secondaryButton} onPress={closeAddModal}>
+                  <Pressable style={styles.secondaryButton} onPress={closeVehicleModal}>
                     <Text style={styles.secondaryButtonText}>Cancel</Text>
                   </Pressable>
 
-                  <Pressable style={styles.modalPrimaryButton} onPress={handleSaveVehicle}>
-                    <Text style={styles.modalPrimaryButtonText}>Save Vehicle</Text>
+                  <Pressable
+                    style={[styles.modalPrimaryButton, isSavingVehicle && styles.modalPrimaryButtonDisabled]}
+                    onPress={handleSaveVehicle}
+                    disabled={isSavingVehicle}>
+                    <Text style={styles.modalPrimaryButtonText}>
+                      {isSavingVehicle ? 'Saving...' : modalMode === 'edit' ? 'Update Vehicle' : 'Save Vehicle'}
+                    </Text>
                   </Pressable>
                 </View>
               </View>
@@ -639,6 +710,49 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
   },
+  savedActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginBottom: 2,
+  },
+  editButton: {
+    minHeight: 34,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#E7F5F3',
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  editButtonText: {
+    color: teal,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  deleteVehicleButton: {
+    minHeight: 34,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#F1D6D6',
+    backgroundColor: '#FFF4F4',
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  deleteVehicleButtonDisabled: {
+    opacity: 0.6,
+  },
+  deleteVehicleButtonText: {
+    color: '#C13B3B',
+    fontSize: 12,
+    fontWeight: '800',
+  },
   primaryButtonText: {
     color: '#FFFFFF',
     fontSize: 15,
@@ -717,6 +831,9 @@ const styles = StyleSheet.create({
     backgroundColor: teal,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  modalPrimaryButtonDisabled: {
+    backgroundColor: '#8FA6A3',
   },
   modalPrimaryButtonText: {
     color: '#FFFFFF',
