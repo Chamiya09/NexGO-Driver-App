@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   SafeAreaView,
@@ -44,6 +45,7 @@ const initialVehicleForm: VehicleForm = {
 export default function DriverVehicleDetailsScreen() {
   const [form, setForm] = useState<VehicleForm>(initialVehicleForm);
   const [vehicle, setVehicle] = useState<VehicleForm | null>(null);
+  const [isAddModalVisible, setIsAddModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -60,6 +62,17 @@ export default function DriverVehicleDetailsScreen() {
       ...current,
       [field]: value,
     }));
+  };
+
+  const openAddModal = () => {
+    setForm(vehicle || initialVehicleForm);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setIsAddModalVisible(true);
+  };
+
+  const closeAddModal = () => {
+    setIsAddModalVisible(false);
   };
 
   const handleSaveVehicle = () => {
@@ -103,6 +116,7 @@ export default function DriverVehicleDetailsScreen() {
     setForm(nextVehicle);
     setErrorMessage(null);
     setSuccessMessage('Vehicle details added successfully.');
+    setIsAddModalVisible(false);
   };
 
   return (
@@ -141,55 +155,27 @@ export default function DriverVehicleDetailsScreen() {
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
           {successMessage ? <Text style={styles.successText}>{successMessage}</Text> : null}
 
-          <Text style={styles.sectionTitle}>ADD VEHICLE</Text>
+          <Text style={styles.sectionTitle}>VEHICLE SETUP</Text>
 
           <View style={styles.groupCard}>
-            <Text style={styles.detailsTitle}>Vehicle category</Text>
-            <Text style={styles.detailsHint}>Choose the category passengers will see during matching.</Text>
+            <View style={styles.detailsHeader}>
+              <View style={styles.vehicleIntroIcon}>
+                <Ionicons name="car-outline" size={20} color={teal} />
+              </View>
 
-            <View style={styles.categoryGrid}>
-              {vehicleCategories.map((category) => {
-                const isSelected = form.category === category;
-
-                return (
-                  <Pressable
-                    key={category}
-                    style={[styles.categoryPill, isSelected && styles.categoryPillActive]}
-                    onPress={() => updateField('category', category)}>
-                    <Text style={[styles.categoryPillText, isSelected && styles.categoryPillTextActive]}>{category}</Text>
-                  </Pressable>
-                );
-              })}
+              <View style={styles.detailsHeaderText}>
+                <Text style={styles.detailsTitle}>{vehicle ? 'Vehicle record added' : 'No vehicle added yet'}</Text>
+                <Text style={styles.detailsHint}>
+                  {vehicle
+                    ? 'Your first vehicle record is ready for the next vehicle management step.'
+                    : 'Add your assigned vehicle before accepting passenger trips.'}
+                </Text>
+              </View>
             </View>
 
-            <FormInput label="Make" value={form.make} onChangeText={(value) => updateField('make', value)} placeholder="Toyota" />
-            <FormInput label="Model" value={form.model} onChangeText={(value) => updateField('model', value)} placeholder="Aqua" />
-            <FormInput
-              label="Manufacture year"
-              value={form.year}
-              onChangeText={(value) => updateField('year', value.replace(/\D/g, '').slice(0, 4))}
-              keyboardType="number-pad"
-              placeholder="2020"
-            />
-            <FormInput
-              label="Plate number"
-              value={form.plateNumber}
-              onChangeText={(value) => updateField('plateNumber', value)}
-              autoCapitalize="characters"
-              placeholder="CAB-1234"
-            />
-            <FormInput label="Color" value={form.color} onChangeText={(value) => updateField('color', value)} placeholder="White" />
-            <FormInput
-              label="Passenger seats"
-              value={form.seats}
-              onChangeText={(value) => updateField('seats', value.replace(/\D/g, '').slice(0, 2))}
-              keyboardType="number-pad"
-              placeholder="4"
-            />
-
-            <Pressable style={styles.primaryButton} onPress={handleSaveVehicle}>
+            <Pressable style={styles.primaryButton} onPress={openAddModal}>
               <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
-              <Text style={styles.primaryButtonText}>Add Vehicle</Text>
+              <Text style={styles.primaryButtonText}>{vehicle ? 'Add Vehicle Again' : 'Add Vehicle'}</Text>
             </Pressable>
           </View>
 
@@ -208,6 +194,85 @@ export default function DriverVehicleDetailsScreen() {
           ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal visible={isAddModalVisible} transparent animationType="fade" onRequestClose={closeAddModal}>
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView style={styles.modalKeyboardWrap} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <ScrollView
+              contentContainerStyle={styles.modalScrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}>
+              <View style={styles.modalCard}>
+                <View style={styles.modalHeader}>
+                  <View>
+                    <Text style={styles.modalTitle}>Add Vehicle</Text>
+                    <Text style={styles.modalSubtitle}>Enter the vehicle assigned to this driver profile.</Text>
+                  </View>
+
+                  <Pressable style={styles.closeButton} onPress={closeAddModal}>
+                    <Ionicons name="close" size={20} color="#102A28" />
+                  </Pressable>
+                </View>
+
+                {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+
+                <Text style={styles.detailsTitle}>Vehicle category</Text>
+                <Text style={styles.detailsHint}>Choose the category passengers will see during matching.</Text>
+
+                <View style={styles.categoryGrid}>
+                  {vehicleCategories.map((category) => {
+                    const isSelected = form.category === category;
+
+                    return (
+                      <Pressable
+                        key={category}
+                        style={[styles.categoryPill, isSelected && styles.categoryPillActive]}
+                        onPress={() => updateField('category', category)}>
+                        <Text style={[styles.categoryPillText, isSelected && styles.categoryPillTextActive]}>{category}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <FormInput label="Make" value={form.make} onChangeText={(value) => updateField('make', value)} placeholder="Toyota" />
+                <FormInput label="Model" value={form.model} onChangeText={(value) => updateField('model', value)} placeholder="Aqua" />
+                <FormInput
+                  label="Manufacture year"
+                  value={form.year}
+                  onChangeText={(value) => updateField('year', value.replace(/\D/g, '').slice(0, 4))}
+                  keyboardType="number-pad"
+                  placeholder="2020"
+                />
+                <FormInput
+                  label="Plate number"
+                  value={form.plateNumber}
+                  onChangeText={(value) => updateField('plateNumber', value)}
+                  autoCapitalize="characters"
+                  placeholder="CAB-1234"
+                />
+                <FormInput label="Color" value={form.color} onChangeText={(value) => updateField('color', value)} placeholder="White" />
+                <FormInput
+                  label="Passenger seats"
+                  value={form.seats}
+                  onChangeText={(value) => updateField('seats', value.replace(/\D/g, '').slice(0, 2))}
+                  keyboardType="number-pad"
+                  placeholder="4"
+                />
+
+                <View style={styles.modalActions}>
+                  <Pressable style={styles.secondaryButton} onPress={closeAddModal}>
+                    <Text style={styles.secondaryButtonText}>Cancel</Text>
+                  </Pressable>
+
+                  <Pressable style={styles.modalPrimaryButton} onPress={handleSaveVehicle}>
+                    <Text style={styles.modalPrimaryButtonText}>Save Vehicle</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -386,6 +451,23 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     padding: 12,
   },
+  detailsHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 12,
+  },
+  vehicleIntroIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: '#E7F5F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailsHeaderText: {
+    flex: 1,
+  },
   detailsTitle: {
     color: '#102A28',
     fontSize: 15,
@@ -459,6 +541,85 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   primaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  modalOverlay: {
+    flex: 1,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(7, 21, 19, 0.45)',
+  },
+  modalKeyboardWrap: {
+    width: '100%',
+  },
+  modalScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingVertical: 18,
+  },
+  modalCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#FFFFFF',
+    padding: 14,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 12,
+  },
+  modalTitle: {
+    color: '#102A28',
+    fontSize: 17,
+    fontWeight: '800',
+    marginBottom: 3,
+  },
+  modalSubtitle: {
+    color: '#617C79',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '500',
+    maxWidth: 240,
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 2,
+  },
+  secondaryButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryButtonText: {
+    color: '#102A28',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  modalPrimaryButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 12,
+    backgroundColor: teal,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalPrimaryButtonText: {
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '800',
