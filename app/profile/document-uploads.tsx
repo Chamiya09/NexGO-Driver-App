@@ -15,13 +15,16 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { type DriverDocument as SavedDriverDocument, useDriverAuth } from '@/context/driver-auth-context';
+import { pickDriverDocument } from '@/src/utils/documentPicker';
+import { uploadFileToCloudinary } from '@/src/utils/fileUpload';
 
 const teal = '#008080';
 
 type DocumentStatus = 'approved' | 'review' | 'missing' | 'rejected';
+type DriverDocumentType = 'license' | 'insurance' | 'registration';
 
 type UploadDocument = {
-  id: string;
+  id: DriverDocumentType;
   title: string;
   subtitle: string;
   icon: keyof typeof Ionicons.glyphMap;
@@ -100,6 +103,7 @@ const buildDocumentsFromDriver = (savedDocuments: SavedDriverDocument[] = []) =>
 export default function DriverDocumentUploadsScreen() {
   const { driver, updateDocument } = useDriverAuth();
   const [documents, setDocuments] = useState(() => buildDocumentsFromDriver(driver?.documents));
+  const [uploadingDocumentId, setUploadingDocumentId] = useState<DriverDocumentType | null>(null);
 
   const requiredCount = documents.length;
   const completeCount = documents.filter((document) => document.status === 'approved').length;
@@ -108,9 +112,23 @@ export default function DriverDocumentUploadsScreen() {
     setDocuments(buildDocumentsFromDriver(driver?.documents));
   }, [driver?.documents]);
 
-  const handleUpload = async (documentId: string) => {
+  const handleUpload = async (documentId: DriverDocumentType) => {
+    if (documentId !== 'license') {
+      Alert.alert('Coming next', 'This step only connects Driver License upload. We will wire this document next.');
+      return;
+    }
+
     try {
-      await updateDocument(documentId as 'license' | 'insurance' | 'registration', `mock://${documentId}-${Date.now()}`);
+      const pickedDocument = await pickDriverDocument();
+      if (!pickedDocument) {
+        return;
+      }
+
+      setUploadingDocumentId(documentId);
+
+      const fileUrl = await uploadFileToCloudinary(pickedDocument);
+      await updateDocument(documentId, fileUrl);
+
       setDocuments((current) =>
         current.map((document) =>
           document.id === documentId
@@ -126,6 +144,8 @@ export default function DriverDocumentUploadsScreen() {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to submit document.';
       Alert.alert('Upload failed', message);
+    } finally {
+      setUploadingDocumentId(null);
     }
   };
 
@@ -170,7 +190,12 @@ export default function DriverDocumentUploadsScreen() {
         <Text style={styles.sectionTitle}>REQUIRED DOCUMENTS</Text>
 
         {documents.map((document) => (
-          <DocumentCard key={document.id} document={document} onUpload={() => handleUpload(document.id)} />
+          <DocumentCard
+            key={document.id}
+            document={document}
+            isUploading={uploadingDocumentId === document.id}
+            onUpload={() => handleUpload(document.id)}
+          />
         ))}
 
         <Text style={styles.sectionTitle}>UPLOAD GUIDELINES</Text>
@@ -185,7 +210,15 @@ export default function DriverDocumentUploadsScreen() {
   );
 }
 
-function DocumentCard({ document, onUpload }: { document: UploadDocument; onUpload: () => void }) {
+function DocumentCard({
+  document,
+  isUploading,
+  onUpload,
+}: {
+  document: UploadDocument;
+  isUploading: boolean;
+  onUpload: () => void;
+}) {
   const meta = statusMeta[document.status];
   const actionLabel = document.status === 'missing' ? 'Upload' : 'Replace';
 
@@ -213,9 +246,9 @@ function DocumentCard({ document, onUpload }: { document: UploadDocument; onUplo
 
       <View style={styles.documentFooter}>
         <Text style={styles.updatedText}>{document.updatedAt}</Text>
-        <Pressable style={styles.uploadButton} onPress={onUpload}>
+        <Pressable style={[styles.uploadButton, isUploading && styles.uploadButtonDisabled]} onPress={onUpload} disabled={isUploading}>
           <Ionicons name="cloud-upload-outline" size={15} color={teal} />
-          <Text style={styles.uploadButtonText}>{actionLabel}</Text>
+          <Text style={styles.uploadButtonText}>{isUploading ? 'Uploading' : actionLabel}</Text>
         </Pressable>
       </View>
     </View>
@@ -433,6 +466,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
+  },
+  uploadButtonDisabled: {
+    opacity: 0.6,
   },
   uploadButtonText: {
     color: teal,
