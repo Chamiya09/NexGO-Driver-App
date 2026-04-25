@@ -113,8 +113,8 @@ export default function DriverDocumentUploadsScreen() {
   }, [driver?.documents]);
 
   const handleUpload = async (documentId: DriverDocumentType) => {
-    if (documentId !== 'license') {
-      Alert.alert('Coming next', 'This step only connects Driver License upload. We will wire this document next.');
+    if (documentId === 'registration') {
+      Alert.alert('Coming next', 'Vehicle Registration upload will be wired in the next step.');
       return;
     }
 
