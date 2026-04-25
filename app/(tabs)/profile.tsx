@@ -22,7 +22,12 @@ type ProfileSection = {
   title: string;
   subtitle: string;
   icon: keyof typeof Ionicons.glyphMap;
-  route?: '/profile/personal-details' | '/profile/document-uploads' | '/profile/security' | '/profile/earnings';
+  route?:
+    | '/profile/personal-details'
+    | '/profile/vehicle-details'
+    | '/profile/document-uploads'
+    | '/profile/security'
+    | '/profile/earnings';
   badge?: string;
 };
 
@@ -32,6 +37,13 @@ const baseProfileSections: ProfileSection[] = [
     subtitle: 'Driver identity, phone, email, and account profile',
     icon: 'person-circle-outline',
     route: '/profile/personal-details',
+  },
+  {
+    title: 'Vehicle Details',
+    subtitle: 'Add the vehicle assigned to your driver account',
+    icon: 'car-sport-outline',
+    route: '/profile/vehicle-details',
+    badge: 'ADD',
   },
   {
     title: 'Document Uploads',
