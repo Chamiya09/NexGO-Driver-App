@@ -247,33 +247,38 @@ export default function DriverVehicleDetailsScreen() {
           <Text style={styles.sectionTitle}>VEHICLE SETUP</Text>
 
           <View style={styles.groupCard}>
-            <View style={styles.detailsHeader}>
-              <View style={styles.vehicleIntroIcon}>
-                <Ionicons name="car-outline" size={20} color={teal} />
+            <View style={styles.setupHeaderRow}>
+              <View style={styles.detailsHeader}>
+                <View style={styles.vehicleIntroIcon}>
+                  <Ionicons name="car-outline" size={20} color={teal} />
+                </View>
+
+                <View style={styles.detailsHeaderText}>
+                  <Text style={styles.detailsTitle}>{vehicle ? 'Vehicle record added' : 'No vehicle added yet'}</Text>
+                  <Text style={styles.detailsHint}>
+                    {vehicle
+                      ? 'You can update or remove this vehicle record from the saved details section.'
+                      : 'Add your assigned vehicle before accepting passenger trips.'}
+                  </Text>
+                </View>
               </View>
 
-              <View style={styles.detailsHeaderText}>
-                <Text style={styles.detailsTitle}>{vehicle ? 'Vehicle record added' : 'No vehicle added yet'}</Text>
-                <Text style={styles.detailsHint}>
-                  {vehicle
-                    ? 'You can update or remove this vehicle record from the saved details section.'
-                    : 'Add your assigned vehicle before accepting passenger trips.'}
-                </Text>
+              <View style={styles.setupActions}>
+                <Pressable
+                  style={[styles.primaryButton, vehicle && styles.primaryButtonDisabled]}
+                  onPress={openAddModal}
+                  disabled={Boolean(vehicle)}>
+                  <Ionicons name={vehicle ? 'checkmark-circle-outline' : 'add'} size={18} color="#FFFFFF" />
+                  <Text style={styles.primaryButtonText}>{vehicle ? 'Added' : 'Add'}</Text>
+                </Pressable>
+
+                <Pressable
+                  style={[styles.refreshButton, isVehicleLoading && styles.refreshButtonDisabled]}
+                  onPress={() => loadVehicle({ showSuccess: true })}
+                  disabled={isVehicleLoading}>
+                  <Ionicons name="refresh" size={18} color={teal} />
+                </Pressable>
               </View>
-            </View>
-
-            <View style={styles.actionRow}>
-              <Pressable style={[styles.primaryButton, vehicle && styles.primaryButtonDisabled]} onPress={openAddModal} disabled={Boolean(vehicle)}>
-                <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
-                <Text style={styles.primaryButtonText}>{vehicle ? 'Vehicle Added' : 'Add Vehicle'}</Text>
-              </Pressable>
-
-              <Pressable
-                style={[styles.refreshButton, isVehicleLoading && styles.refreshButtonDisabled]}
-                onPress={() => loadVehicle({ showSuccess: true })}
-                disabled={isVehicleLoading}>
-                <Ionicons name="refresh" size={18} color={teal} />
-              </Pressable>
             </View>
           </View>
 
@@ -615,7 +620,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   groupCard: {
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#D9E9E6',
     backgroundColor: '#FFFFFF',
@@ -623,11 +628,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     padding: 12,
   },
+  setupHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
   detailsHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
-    marginBottom: 12,
+    flex: 1,
   },
   vehicleIntroIcon: {
     width: 34,
@@ -651,7 +662,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     fontWeight: '500',
-    marginBottom: 10,
   },
   categoryGrid: {
     flexDirection: 'row',
@@ -703,28 +713,34 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   primaryButton: {
-    flex: 1,
-    minHeight: 46,
-    borderRadius: 12,
+    minHeight: 38,
+    borderRadius: 999,
     backgroundColor: teal,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    gap: 7,
-    marginTop: 2,
+    gap: 6,
+    paddingHorizontal: 14,
+    shadowColor: teal,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 3,
   },
   primaryButtonDisabled: {
     backgroundColor: '#8FA6A3',
+    shadowOpacity: 0,
   },
-  actionRow: {
+  setupActions: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+    alignItems: 'flex-start',
+    justifyContent: 'flex-end',
+    gap: 8,
   },
   refreshButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 12,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     borderWidth: 1,
     borderColor: '#D9E9E6',
     backgroundColor: '#E7F5F3',
@@ -917,7 +933,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '800',
   },
   modalOverlay: {
