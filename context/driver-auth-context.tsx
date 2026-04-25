@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 
 import { API_BASE_URL, parseApiResponse } from '@/lib/api';
 import { clearDriverToken, setDriverToken } from '@/lib/driver-session';
@@ -12,6 +12,16 @@ export type DriverDocument = {
   rejectionReason?: string;
 };
 
+export type DriverVehicle = {
+  category: 'Bike' | 'Tuk' | 'Mini' | 'Car' | 'Van';
+  make: string;
+  model: string;
+  year: number;
+  plateNumber: string;
+  color: string;
+  seats: number;
+};
+
 export type DriverProfile = {
   id: string;
   fullName: string;
@@ -21,6 +31,7 @@ export type DriverProfile = {
   profileImageUrl?: string;
   status?: string;
   documents?: DriverDocument[];
+  vehicle?: DriverVehicle | null;
   security?: {
     twoStepVerificationEnabled?: boolean;
   };
@@ -52,6 +63,16 @@ type ChangePasswordPayload = {
   confirmNewPassword: string;
 };
 
+type CreateVehiclePayload = {
+  category: DriverVehicle['category'];
+  make: string;
+  model: string;
+  year: number;
+  plateNumber: string;
+  color: string;
+  seats: number;
+};
+
 type AuthResponse = {
   token: string;
   driver: DriverProfile;
@@ -69,6 +90,7 @@ type DriverAuthContextValue = {
   register: (payload: RegisterPayload) => Promise<void>;
   updateProfile: (payload: UpdateProfilePayload) => Promise<void>;
   changePassword: (payload: ChangePasswordPayload) => Promise<void>;
+  createVehicle: (payload: CreateVehiclePayload) => Promise<void>;
   updateDocument: (documentType: DriverDocument['documentType'], fileUrl: string) => Promise<void>;
   updateSecurity: (twoStepVerificationEnabled: boolean) => Promise<void>;
   logout: () => void;
@@ -200,6 +222,21 @@ export function DriverAuthProvider({ children }: { children: React.ReactNode }) 
     setDriver(data.driver);
   };
 
+  const createVehicle = async (payload: CreateVehiclePayload) => {
+    const nextToken = requireToken();
+    const response = await fetch(`${API_BASE_URL}/driver-auth/me/vehicle`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${nextToken}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await parseApiResponse<DriverResponse>(response);
+    setDriver(data.driver);
+  };
+
   const updateSecurity = async (twoStepVerificationEnabled: boolean) => {
     const nextToken = requireToken();
     const response = await fetch(`${API_BASE_URL}/driver-auth/me/security`, {
@@ -221,21 +258,19 @@ export function DriverAuthProvider({ children }: { children: React.ReactNode }) 
     clearDriverToken();
   };
 
-  const value = useMemo(
-    () => ({
-      driver,
-      token,
-      loading,
-      login,
-      register,
-      updateProfile,
-      changePassword,
-      updateDocument,
-      updateSecurity,
-      logout,
-    }),
-    [driver, token, loading]
-  );
+  const value = {
+    driver,
+    token,
+    loading,
+    login,
+    register,
+    updateProfile,
+    changePassword,
+    createVehicle,
+    updateDocument,
+    updateSecurity,
+    logout,
+  };
 
   return <DriverAuthContext.Provider value={value}>{children}</DriverAuthContext.Provider>;
 }

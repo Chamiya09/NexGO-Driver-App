@@ -16,6 +16,8 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import { type DriverVehicle, useDriverAuth } from '@/context/driver-auth-context';
+
 const teal = '#008080';
 
 const vehicleCategories = ['Bike', 'Tuk', 'Mini', 'Car', 'Van'] as const;
@@ -43,11 +45,14 @@ const initialVehicleForm: VehicleForm = {
 };
 
 export default function DriverVehicleDetailsScreen() {
+  const { driver, createVehicle } = useDriverAuth();
   const [form, setForm] = useState<VehicleForm>(initialVehicleForm);
-  const [vehicle, setVehicle] = useState<VehicleForm | null>(null);
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const vehicle = driver?.vehicle || null;
+
+  const vehicleForm = useMemo(() => mapVehicleToForm(vehicle), [vehicle]);
 
   const heroTitle = useMemo(() => {
     if (!vehicle) {
@@ -65,7 +70,7 @@ export default function DriverVehicleDetailsScreen() {
   };
 
   const openAddModal = () => {
-    setForm(vehicle || initialVehicleForm);
+    setForm(vehicleForm);
     setErrorMessage(null);
     setSuccessMessage(null);
     setIsAddModalVisible(true);
@@ -75,7 +80,7 @@ export default function DriverVehicleDetailsScreen() {
     setIsAddModalVisible(false);
   };
 
-  const handleSaveVehicle = () => {
+  const handleSaveVehicle = async () => {
     const nextVehicle = {
       ...form,
       make: form.make.trim(),
@@ -112,11 +117,24 @@ export default function DriverVehicleDetailsScreen() {
       return;
     }
 
-    setVehicle(nextVehicle);
-    setForm(nextVehicle);
-    setErrorMessage(null);
-    setSuccessMessage('Vehicle details added successfully.');
-    setIsAddModalVisible(false);
+    try {
+      await createVehicle({
+        category: nextVehicle.category,
+        make: nextVehicle.make,
+        model: nextVehicle.model,
+        year: Number(nextVehicle.year),
+        plateNumber: nextVehicle.plateNumber,
+        color: nextVehicle.color,
+        seats: Number(nextVehicle.seats),
+      });
+      setForm(nextVehicle);
+      setErrorMessage(null);
+      setSuccessMessage('Vehicle details added successfully.');
+      setIsAddModalVisible(false);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to add vehicle details.');
+      setSuccessMessage(null);
+    }
   };
 
   return (
@@ -173,9 +191,12 @@ export default function DriverVehicleDetailsScreen() {
               </View>
             </View>
 
-            <Pressable style={styles.primaryButton} onPress={openAddModal}>
+            <Pressable
+              style={[styles.primaryButton, vehicle && styles.primaryButtonDisabled]}
+              onPress={openAddModal}
+              disabled={Boolean(vehicle)}>
               <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
-              <Text style={styles.primaryButtonText}>{vehicle ? 'Add Vehicle Again' : 'Add Vehicle'}</Text>
+              <Text style={styles.primaryButtonText}>{vehicle ? 'Vehicle Already Added' : 'Add Vehicle'}</Text>
             </Pressable>
           </View>
 
@@ -185,10 +206,10 @@ export default function DriverVehicleDetailsScreen() {
               <View style={styles.groupCard}>
                 <DetailRow label="Category" value={vehicle.category} />
                 <DetailRow label="Vehicle" value={`${vehicle.make} ${vehicle.model}`} />
-                <DetailRow label="Year" value={vehicle.year} />
+                <DetailRow label="Year" value={String(vehicle.year)} />
                 <DetailRow label="Plate number" value={vehicle.plateNumber} />
                 <DetailRow label="Color" value={vehicle.color} />
-                <DetailRow label="Passenger seats" value={vehicle.seats} />
+                <DetailRow label="Passenger seats" value={String(vehicle.seats)} />
               </View>
             </>
           ) : null}
@@ -275,6 +296,22 @@ export default function DriverVehicleDetailsScreen() {
       </Modal>
     </SafeAreaView>
   );
+}
+
+function mapVehicleToForm(vehicle?: DriverVehicle | null): VehicleForm {
+  if (!vehicle) {
+    return initialVehicleForm;
+  }
+
+  return {
+    category: vehicle.category,
+    make: vehicle.make,
+    model: vehicle.model,
+    year: String(vehicle.year),
+    plateNumber: vehicle.plateNumber,
+    color: vehicle.color,
+    seats: String(vehicle.seats),
+  };
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
@@ -539,6 +576,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 7,
     marginTop: 2,
+  },
+  primaryButtonDisabled: {
+    backgroundColor: '#8FA6A3',
   },
   primaryButtonText: {
     color: '#FFFFFF',
