@@ -7,6 +7,7 @@ type UploadableFile = {
 };
 
 type UploadResponse = {
+  fileUrl?: string;
   url?: string;
   secureUrl?: string;
   message?: string;
@@ -64,7 +65,7 @@ export async function uploadFileToCloudinary({ uri, name, mimeType }: Uploadable
     throw new Error(data.message || 'File upload failed.');
   }
 
-  const uploadedUrl = data.secureUrl || data.url;
+  const uploadedUrl = data.fileUrl || data.secureUrl || data.url;
 
   if (!uploadedUrl) {
     throw new Error('Upload completed, but no file URL was returned.');
