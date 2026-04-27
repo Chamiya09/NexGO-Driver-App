@@ -328,7 +328,11 @@ export default function DriverTripsScreen() {
   const fetchRides = useCallback(async (isRefresh = false) => {
     if (!token) return;
 
-    isRefresh ? setRefreshing(true) : setLoading(true);
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setError(null);
 
     try {

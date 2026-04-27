@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -14,6 +14,7 @@ import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useDriverAuth } from '@/context/driver-auth-context';
 import driverSocket from '@/lib/driverSocket';
+import { MAP_TILE_URL_TEMPLATE, MAP_TILE_USER_AGENT } from '@/lib/mapTiles';
 
 const teal = '#008080';
 
@@ -65,16 +66,26 @@ export default function RidePreviewScreen() {
   const vehicleType  = params.vehicleType   ?? 'Ride';
   const price        = Number(params.price  ?? 0);
 
-  const pickup:  LatLng = { latitude: parseFloat(params.pLat ?? '0'), longitude: parseFloat(params.pLng ?? '0') };
-  const dropoff: LatLng = { latitude: parseFloat(params.dLat ?? '0'), longitude: parseFloat(params.dLng ?? '0') };
+  const pickup = useMemo<LatLng>(
+    () => ({ latitude: parseFloat(params.pLat ?? '0'), longitude: parseFloat(params.pLng ?? '0') }),
+    [params.pLat, params.pLng]
+  );
+  const dropoff = useMemo<LatLng>(
+    () => ({ latitude: parseFloat(params.dLat ?? '0'), longitude: parseFloat(params.dLng ?? '0') }),
+    [params.dLat, params.dLng]
+  );
   const pName = params.pName ?? '';
   const dName = params.dName ?? '';
 
   // Driver's current coords (passed from home.tsx). Fall back to pickup area if missing.
   const hasDriverCoords = !!(params.drLat && params.drLng);
-  const driverPos: LatLng = hasDriverCoords
-    ? { latitude: parseFloat(params.drLat!), longitude: parseFloat(params.drLng!) }
-    : pickup;
+  const driverPos = useMemo<LatLng>(
+    () =>
+      hasDriverCoords
+        ? { latitude: parseFloat(params.drLat!), longitude: parseFloat(params.drLng!) }
+        : pickup,
+    [hasDriverCoords, params.drLat, params.drLng, pickup]
+  );
 
   // ── Map mode ──────────────────────────────────────────────────────────────
   // 'navigate' = driver current position → passenger pickup (where to go NOW)
@@ -122,7 +133,7 @@ export default function RidePreviewScreen() {
     };
 
     loadRoutes();
-  }, []);
+  }, [driverPos, dropoff, hasDriverCoords, pickup]);
 
   // ── Switch mode + re-fit map ──────────────────────────────────────────────
   const switchMode = (mode: MapMode) => {
@@ -187,7 +198,12 @@ export default function RidePreviewScreen() {
           latitudeDelta: 0.06,
           longitudeDelta: 0.06,
         }}>
-        <UrlTile urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maximumZ={19} flipY={false} />
+        <UrlTile
+          urlTemplate={MAP_TILE_URL_TEMPLATE}
+          maximumZ={19}
+          flipY={false}
+          userAgent={MAP_TILE_USER_AGENT}
+        />
 
         {/* Driver position marker (navigate mode) */}
         {mapMode === 'navigate' && hasDriverCoords && (
