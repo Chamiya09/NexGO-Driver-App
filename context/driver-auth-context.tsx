@@ -12,6 +12,16 @@ export type DriverDocument = {
   rejectionReason?: string;
 };
 
+export type DriverVehicle = {
+  category: 'Bike' | 'Tuk' | 'Mini' | 'Car' | 'Van';
+  make: string;
+  model: string;
+  year: number;
+  plateNumber: string;
+  color: string;
+  seats: number;
+};
+
 export type DriverProfile = {
   id: string;
   fullName: string;
@@ -21,6 +31,7 @@ export type DriverProfile = {
   profileImageUrl?: string;
   status?: string;
   documents?: DriverDocument[];
+  vehicle?: DriverVehicle | null;
   security?: {
     twoStepVerificationEnabled?: boolean;
   };
@@ -52,6 +63,18 @@ type ChangePasswordPayload = {
   confirmNewPassword: string;
 };
 
+type CreateVehiclePayload = {
+  category: DriverVehicle['category'];
+  make: string;
+  model: string;
+  year: number;
+  plateNumber: string;
+  color: string;
+  seats: number;
+};
+
+type UpdateVehiclePayload = CreateVehiclePayload;
+
 type AuthResponse = {
   token: string;
   driver: DriverProfile;
@@ -59,6 +82,10 @@ type AuthResponse = {
 
 type DriverResponse = {
   driver: DriverProfile;
+};
+
+type VehicleResponse = {
+  vehicle: DriverVehicle | null;
 };
 
 type DriverAuthContextValue = {
@@ -70,6 +97,10 @@ type DriverAuthContextValue = {
   register: (payload: RegisterPayload) => Promise<void>;
   updateProfile: (payload: UpdateProfilePayload) => Promise<void>;
   changePassword: (payload: ChangePasswordPayload) => Promise<void>;
+  getVehicle: () => Promise<DriverVehicle | null>;
+  createVehicle: (payload: CreateVehiclePayload) => Promise<void>;
+  updateVehicle: (payload: UpdateVehiclePayload) => Promise<void>;
+  deleteVehicle: () => Promise<void>;
   updateDocument: (documentType: DriverDocument['documentType'], fileUrl: string) => Promise<void>;
   updateSecurity: (twoStepVerificationEnabled: boolean) => Promise<void>;
   logout: () => void;
@@ -208,6 +239,76 @@ export function DriverAuthProvider({ children }: { children: React.ReactNode }) 
         Authorization: `Bearer ${nextToken}`,
       },
       body: JSON.stringify({ fileUrl }),
+    });
+
+    const data = await parseApiResponse<DriverResponse>(response);
+    setDriver(data.driver);
+  };
+
+  const getVehicle = useCallback(async () => {
+    if (!token) {
+      throw new Error('Please sign in again.');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/driver-auth/me/vehicle`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const data = await parseApiResponse<VehicleResponse>(response);
+    setDriver((currentDriver) => {
+      if (!currentDriver) {
+        return currentDriver;
+      }
+
+      return {
+        ...currentDriver,
+        vehicle: data.vehicle,
+      };
+    });
+
+    return data.vehicle;
+  }, [token]);
+
+  const createVehicle = async (payload: CreateVehiclePayload) => {
+    const nextToken = requireToken();
+    const response = await fetch(`${API_BASE_URL}/driver-auth/me/vehicle`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${nextToken}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await parseApiResponse<DriverResponse>(response);
+    setDriver(data.driver);
+  };
+
+  const updateVehicle = async (payload: UpdateVehiclePayload) => {
+    const nextToken = requireToken();
+    const response = await fetch(`${API_BASE_URL}/driver-auth/me/vehicle`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${nextToken}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await parseApiResponse<DriverResponse>(response);
+    setDriver(data.driver);
+  };
+
+  const deleteVehicle = async () => {
+    const nextToken = requireToken();
+    const response = await fetch(`${API_BASE_URL}/driver-auth/me/vehicle`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${nextToken}`,
+      },
     });
 
     const data = await parseApiResponse<DriverResponse>(response);

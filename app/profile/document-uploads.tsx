@@ -15,13 +15,21 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { type DriverDocument as SavedDriverDocument, useDriverAuth } from '@/context/driver-auth-context';
+import {
+  captureDriverDocumentImage,
+  pickDriverImage,
+  pickDriverPdf,
+  type PickedDriverDocument,
+} from '@/src/utils/documentPicker';
+import { uploadFileToCloudinary } from '@/src/utils/fileUpload';
 
 const teal = '#008080';
 
 type DocumentStatus = 'approved' | 'review' | 'missing' | 'rejected';
+type DriverDocumentType = 'license' | 'insurance' | 'registration';
 
 type UploadDocument = {
-  id: string;
+  id: DriverDocumentType;
   title: string;
   subtitle: string;
   icon: keyof typeof Ionicons.glyphMap;
@@ -131,7 +139,36 @@ export default function DriverDocumentUploadsScreen() {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to submit document.';
       Alert.alert('Upload failed', message);
+    } finally {
+      setUploadingDocumentId(null);
     }
+  };
+
+  const handleUpload = async (documentId: DriverDocumentType) => {
+    Alert.alert('Upload document', 'Choose how you want to add this document.', [
+      {
+        text: 'Upload PDF',
+        onPress: async () => {
+          const pickedDocument = await pickDriverPdf();
+          await submitPickedDocument(documentId, pickedDocument);
+        },
+      },
+      {
+        text: 'Upload Image',
+        onPress: async () => {
+          const pickedDocument = await pickDriverImage();
+          await submitPickedDocument(documentId, pickedDocument);
+        },
+      },
+      {
+        text: 'Use Camera',
+        onPress: async () => {
+          const pickedDocument = await captureDriverDocumentImage();
+          await submitPickedDocument(documentId, pickedDocument);
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
   return (
@@ -175,7 +212,12 @@ export default function DriverDocumentUploadsScreen() {
         <Text style={styles.sectionTitle}>REQUIRED DOCUMENTS</Text>
 
         {documents.map((document) => (
-          <DocumentCard key={document.id} document={document} onUpload={() => handleUpload(document.id)} />
+          <DocumentCard
+            key={document.id}
+            document={document}
+            isUploading={uploadingDocumentId === document.id}
+            onUpload={() => handleUpload(document.id)}
+          />
         ))}
 
         <Text style={styles.sectionTitle}>UPLOAD GUIDELINES</Text>
@@ -190,7 +232,15 @@ export default function DriverDocumentUploadsScreen() {
   );
 }
 
-function DocumentCard({ document, onUpload }: { document: UploadDocument; onUpload: () => void }) {
+function DocumentCard({
+  document,
+  isUploading,
+  onUpload,
+}: {
+  document: UploadDocument;
+  isUploading: boolean;
+  onUpload: () => void;
+}) {
   const meta = statusMeta[document.status];
   const actionLabel = document.status === 'missing' ? 'Upload' : 'Replace';
 
@@ -225,7 +275,7 @@ function DocumentCard({ document, onUpload }: { document: UploadDocument; onUplo
         </View>
         <Pressable style={styles.uploadButton} onPress={onUpload}>
           <Ionicons name="cloud-upload-outline" size={15} color={teal} />
-          <Text style={styles.uploadButtonText}>{actionLabel}</Text>
+          <Text style={styles.uploadButtonText}>{isUploading ? 'Uploading' : actionLabel}</Text>
         </Pressable>
       </View>
     </View>
@@ -452,6 +502,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
+  },
+  uploadButtonDisabled: {
+    opacity: 0.6,
   },
   uploadButtonText: {
     color: teal,

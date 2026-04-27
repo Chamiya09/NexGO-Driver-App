@@ -1,142 +1,454 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
+  Animated,
+  FlatList,
   Platform,
-  Pressable,
+  RefreshControl,
   SafeAreaView,
-  ScrollView,
   StatusBar as RNStatusBar,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import { useDriverAuth } from '@/context/driver-auth-context';
+import { API_BASE_URL } from '@/lib/api';
+import driverSocket from '@/lib/driverSocket';
 
+// Driver App Primary Teal Theme
 const teal = '#008080';
 
-const upcomingTrips = [
-  {
-    id: 'airport-ride',
-    time: '04:30 PM',
-    pickup: 'Colombo Fort Station',
-    dropoff: 'Bandaranaike Airport',
-    fare: 'LKR 4,850',
-    distance: '28.4 km',
-  },
-  {
-    id: 'hospital-ride',
-    time: '06:15 PM',
-    pickup: 'Nugegoda Junction',
-    dropoff: 'Asiri Central Hospital',
-    fare: 'LKR 1,620',
-    distance: '8.2 km',
-  },
-];
+// ── Types ─────────────────────────────────────────────────────────────────────
+type RideStatus = 'Pending' | 'Accepted' | 'InProgress' | 'Completed' | 'Cancelled';
 
-const recentTrips = [
-  { id: 'r1', route: 'Kollupitiya to Bambalapitiya', fare: 'LKR 780', status: 'Completed' },
-  { id: 'r2', route: 'Rajagiriya to Borella', fare: 'LKR 940', status: 'Completed' },
-  { id: 'r3', route: 'Wellawatte to Dehiwala', fare: 'LKR 690', status: 'Completed' },
-];
+type Coords = { latitude: number; longitude: number; name?: string };
 
+type Ride = {
+  id: string;
+  pickup: Coords;
+  dropoff: Coords;
+  vehicleType: string;
+  price: number;
+  status: RideStatus;
+  requestedAt: string;
+};
+
+// ── Status tag config ─────────────────────────────────────────────────────────
+type StatusConfig = {
+  label: string;
+  bg: string;
+  text: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  pulse: boolean;
+};
+
+const STATUS_CONFIG: Record<RideStatus, StatusConfig> = {
+  Pending: {
+    label: 'Pending',
+    bg: '#FFF8EC',
+    text: '#D97706',
+    icon: 'hourglass-outline',
+    pulse: true,
+  },
+  Accepted: {
+    label: 'Confirmed',
+    bg: '#E9F8EF',
+    text: '#178A4F',
+    icon: 'checkmark-circle-outline',
+    pulse: false,
+  },
+  InProgress: {
+    label: 'In Progress',
+    bg: '#E7F5F3',
+    text: teal,
+    icon: 'car-outline',
+    pulse: false,
+  },
+  Completed: {
+    label: 'Completed',
+    bg: '#F0F5FA',
+    text: '#4A6FA5',
+    icon: 'checkmark-done-circle-outline',
+    pulse: false,
+  },
+  Cancelled: {
+    label: 'Cancelled',
+    bg: '#FEF2F2',
+    text: '#DC2626',
+    icon: 'close-circle-outline',
+    pulse: false,
+  },
+};
+
+// ── Utility: shorten a location name ─────────────────────────────────────────
+const shortenLocation = (name?: string, lat?: number, lng?: number): string => {
+  if (name && name.trim()) {
+    return name.length > 28 ? name.substring(0, 26) + '…' : name;
+  }
+  if (lat !== undefined && lng !== undefined) {
+    return `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
+  }
+  return 'Unknown location';
+};
+
+// ── Utility: format date ──────────────────────────────────────────────────────
+const formatDate = (iso: string): string => {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-LK', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+// ── Pulsing dot sub-component ─────────────────────────────────────────────────
+function PulseDot({ color }: { color: string }) {
+  const scale = React.useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(scale, { toValue: 1.55, duration: 700, useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 1, duration: 700, useNativeDriver: true }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [scale]);
+
+  return (
+    <Animated.View
+      style={[
+        pulseDotStyles.dot,
+        { backgroundColor: color, transform: [{ scale }] },
+      ]}
+    />
+  );
+}
+
+const pulseDotStyles = StyleSheet.create({
+  dot: { width: 8, height: 8, borderRadius: 4 },
+});
+
+// ── Status Tag sub-component ──────────────────────────────────────────────────
+function StatusTag({ status }: { status: RideStatus }) {
+  const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.Pending;
+  return (
+    <View style={[tagStyles.badge, { backgroundColor: cfg.bg }]}>
+      {cfg.pulse
+        ? <PulseDot color={cfg.text} />
+        : <Ionicons name={cfg.icon} size={13} color={cfg.text} />}
+      <Text style={[tagStyles.label, { color: cfg.text }]}>{cfg.label}</Text>
+    </View>
+  );
+}
+
+const tagStyles = StyleSheet.create({
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+  },
+  label: { fontSize: 12, fontWeight: '800' },
+});
+
+// ── Ride Card sub-component ───────────────────────────────────────────────────
+function RideCard({ ride }: { ride: Ride }) {
+  const pickupName = shortenLocation(ride.pickup?.name, ride.pickup?.latitude, ride.pickup?.longitude);
+  const dropoffName = shortenLocation(ride.dropoff?.name, ride.dropoff?.latitude, ride.dropoff?.longitude);
+
+  return (
+    <View style={cardStyles.card}>
+      {/* Top row: date + status */}
+      <View style={cardStyles.topRow}>
+        <View style={cardStyles.dateWrap}>
+          <Ionicons name="calendar-outline" size={13} color="#8CA1A0" />
+          <Text style={cardStyles.date}>{formatDate(ride.requestedAt)}</Text>
+        </View>
+        <StatusTag status={ride.status} />
+      </View>
+
+      {/* Route block */}
+      <View style={cardStyles.routeBlock}>
+        {/* Pickup */}
+        <View style={cardStyles.routeRow}>
+          <View style={[cardStyles.routeDot, { backgroundColor: teal }]} />
+          <View style={cardStyles.routeTextWrap}>
+            <Text style={cardStyles.routeLabel}>PICKUP</Text>
+            <Text style={cardStyles.routeValue} numberOfLines={1}>{pickupName}</Text>
+          </View>
+        </View>
+        {/* Connector line */}
+        <View style={cardStyles.connector}>
+          <View style={cardStyles.connectorLine} />
+        </View>
+        {/* Dropoff */}
+        <View style={cardStyles.routeRow}>
+          <View style={[cardStyles.routeDot, { backgroundColor: '#E74C3C' }]} />
+          <View style={cardStyles.routeTextWrap}>
+            <Text style={cardStyles.routeLabel}>DROP-OFF</Text>
+            <Text style={cardStyles.routeValue} numberOfLines={1}>{dropoffName}</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Footer: vehicle + fare */}
+      <View style={cardStyles.footer}>
+        <View style={cardStyles.vehicleChip}>
+          <Ionicons name="car-outline" size={13} color={teal} />
+          <Text style={cardStyles.vehicleText}>{ride.vehicleType}</Text>
+        </View>
+        <Text style={cardStyles.fare}>LKR {ride.price.toLocaleString()}</Text>
+      </View>
+    </View>
+  );
+}
+
+const cardStyles = StyleSheet.create({
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E0EDEB',
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  dateWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  date: { fontSize: 12, fontWeight: '600', color: '#8CA1A0' },
+  routeBlock: {
+    backgroundColor: '#F7FBFA',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12,
+  },
+  routeRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  routeDot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
+  routeTextWrap: { flex: 1 },
+  routeLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#8CA1A0',
+    letterSpacing: 0.5,
+    marginBottom: 1,
+  },
+  routeValue: { fontSize: 13, fontWeight: '800', color: '#102A28' },
+  connector: { paddingLeft: 4, paddingVertical: 3 },
+  connectorLine: {
+    width: 2,
+    height: 12,
+    backgroundColor: '#D9E9E6',
+    borderRadius: 1,
+    marginLeft: 3,
+  },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  vehicleChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#E7F5F3',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  vehicleText: { fontSize: 12, fontWeight: '800', color: teal },
+  fare: { fontSize: 15, fontWeight: '900', color: '#102A28' },
+});
+
+// ── Empty state ──────────────────────────────────────────────────────────────
+function EmptyState() {
+  return (
+    <View style={emptyStyles.wrap}>
+      <View style={emptyStyles.iconWrap}>
+        <Ionicons name="car-outline" size={40} color={teal} />
+      </View>
+      <Text style={emptyStyles.title}>No rides yet</Text>
+      <Text style={emptyStyles.sub}>
+        Your trip history will appear here once you complete or accept your first ride.
+      </Text>
+    </View>
+  );
+}
+
+const emptyStyles = StyleSheet.create({
+  wrap: { alignItems: 'center', paddingTop: 60, paddingHorizontal: 40 },
+  iconWrap: {
+    width: 80, height: 80, borderRadius: 24,
+    backgroundColor: '#E7F5F3',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 16,
+  },
+  title: { fontSize: 18, fontWeight: '900', color: '#102A28', marginBottom: 8 },
+  sub: {
+    fontSize: 13, fontWeight: '500', color: '#617C79',
+    textAlign: 'center', lineHeight: 20,
+  },
+});
+
+// ── Main Screen ───────────────────────────────────────────────────────────────
 export default function DriverTripsScreen() {
+  const { driver, token } = useDriverAuth();
+
+  const [rides, setRides] = useState<Ride[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // ── Fetch rides from API ───────────────────────────────────────────────────
+  const fetchRides = useCallback(async (isRefresh = false) => {
+    if (!token) return;
+
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+    setError(null);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/rides/driver-rides`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.message ?? 'Failed to load rides');
+      }
+
+      const data = await res.json() as { rides: Ride[] };
+      // Sort rides newest requested first if not already sorted
+      const sortedRides = (data.rides ?? []).sort(
+        (a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime()
+      );
+      setRides(sortedRides);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Unable to load rides');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [token]);
+
+  // Initial load
+  useEffect(() => {
+    fetchRides();
+  }, [fetchRides]);
+
+  // ── Socket: real-time status updates ──────────────────────────────────────
+  useEffect(() => {
+    if (!driver?.id) return;
+
+    const handleRideUpdate = ({ rideId, status }: { rideId: string; status: RideStatus }) => {
+      console.log('[DriverTrips] rideStatusUpdate:', rideId, status);
+      setRides((prev) =>
+        prev.map((r) => (r.id === rideId ? { ...r, status } : r))
+      );
+    };
+
+    driverSocket.on('rideStatusUpdate', handleRideUpdate);
+
+    return () => {
+      driverSocket.off('rideStatusUpdate', handleRideUpdate);
+    };
+  }, [driver?.id]);
+
+  // ── Summary counts ─────────────────────────────────────────────────────────
+  const activeCount = rides.filter((r) => r.status === 'Accepted' || r.status === 'InProgress').length;
+  const completedCount = rides.filter((r) => r.status === 'Completed').length;
+
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
+
+      {/* Header */}
+      <View style={styles.header}>
+        <View>
           <Text style={styles.eyebrow}>TRIPS</Text>
-          <Text style={styles.title}>Ride activity</Text>
-          <Text style={styles.subtitle}>Track upcoming pickups, active ride flow, and recently completed trips.</Text>
+          <Text style={styles.title}>Ride Activity</Text>
         </View>
+        <TouchableOpacity style={styles.refreshBtn} onPress={() => fetchRides(true)}>
+          <Ionicons name="refresh-outline" size={20} color={teal} />
+        </TouchableOpacity>
+      </View>
 
-        <View style={styles.statusCard}>
-          <View style={styles.statusIconWrap}>
-            <Ionicons name="radio-outline" size={24} color="#FFFFFF" />
-          </View>
-          <View style={styles.statusTextWrap}>
-            <Text style={styles.statusTitle}>No active ride</Text>
-            <Text style={styles.statusSubtitle}>Go online from Home to start receiving nearby requests.</Text>
-          </View>
-        </View>
-
+      {/* Summary chips */}
+      {rides.length > 0 && (
         <View style={styles.summaryRow}>
-          <View style={styles.summaryCard}>
-            <Ionicons name="calendar-outline" size={18} color={teal} />
-            <Text style={styles.summaryValue}>2</Text>
-            <Text style={styles.summaryLabel}>Upcoming</Text>
-          </View>
-          <View style={styles.summaryCard}>
-            <Ionicons name="checkmark-done-outline" size={18} color={teal} />
-            <Text style={styles.summaryValue}>12</Text>
-            <Text style={styles.summaryLabel}>Today</Text>
-          </View>
-          <View style={styles.summaryCard}>
-            <Ionicons name="time-outline" size={18} color={teal} />
-            <Text style={styles.summaryValue}>41h</Text>
-            <Text style={styles.summaryLabel}>Online</Text>
-          </View>
+          <SummaryChip icon="list-outline" label="Total" value={String(rides.length)} />
+          <SummaryChip icon="car-sport-outline" label="Active" value={String(activeCount)} />
+          <SummaryChip icon="checkmark-done-outline" label="Done" value={String(completedCount)} />
         </View>
+      )}
 
-        <View style={styles.sectionHeadingWrap}>
-          <Text style={styles.sectionHeading}>Upcoming Requests</Text>
-          <Text style={styles.sectionSubheading}>Scheduled pickups and accepted ride queue</Text>
+      {/* Content */}
+      {loading ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color={teal} />
+          <Text style={styles.loadingText}>Loading your trips...</Text>
         </View>
-
-        {upcomingTrips.map((trip) => (
-          <View key={trip.id} style={styles.tripCard}>
-            <View style={styles.tripHeader}>
-              <View style={styles.timePill}>
-                <Ionicons name="time-outline" size={14} color={teal} />
-                <Text style={styles.timePillText}>{trip.time}</Text>
-              </View>
-              <Text style={styles.tripFare}>{trip.fare}</Text>
-            </View>
-
-            <View style={styles.routeBlock}>
-              <RoutePoint icon="radio-button-on" label="Pickup" value={trip.pickup} />
-              <View style={styles.routeDivider} />
-              <RoutePoint icon="location" label="Drop-off" value={trip.dropoff} />
-            </View>
-
-            <View style={styles.tripFooter}>
-              <Text style={styles.distanceText}>{trip.distance}</Text>
-              <Pressable style={styles.detailButton}>
-                <Text style={styles.detailButtonText}>View Details</Text>
-                <Ionicons name="chevron-forward" size={15} color={teal} />
-              </Pressable>
-            </View>
-          </View>
-        ))}
-
-        <View style={styles.sectionHeadingWrap}>
-          <Text style={styles.sectionHeading}>Recent Trips</Text>
-          <Text style={styles.sectionSubheading}>Completed ride history for quick review</Text>
+      ) : error ? (
+        <View style={styles.errorWrap}>
+          <Ionicons name="cloud-offline-outline" size={40} color="#DC2626" />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => fetchRides()}>
+            <Text style={styles.retryBtnText}>Retry</Text>
+          </TouchableOpacity>
         </View>
-
-        <View style={styles.recentCard}>
-          {recentTrips.map((trip, index) => (
-            <View key={trip.id}>
-              {index > 0 ? <View style={styles.inlineDivider} /> : null}
-              <View style={styles.recentRow}>
-                <View style={styles.recentIconWrap}>
-                  <Ionicons name="car-outline" size={17} color={teal} />
-                </View>
-                <View style={styles.recentTextWrap}>
-                  <Text style={styles.recentRoute}>{trip.route}</Text>
-                  <Text style={styles.recentStatus}>{trip.status}</Text>
-                </View>
-                <Text style={styles.recentFare}>{trip.fare}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      </ScrollView>
+      ) : (
+        <FlatList
+          data={rides}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => <RideCard ride={item} />}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={<EmptyState />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => fetchRides(true)}
+              colors={[teal]}
+              tintColor={teal}
+            />
+          }
+        />
+      )}
     </SafeAreaView>
   );
 }
 
-function RoutePoint({
+// ── Summary chip component ────────────────────────────────────────────────────
+function SummaryChip({
   icon,
   label,
   value,
@@ -146,93 +458,16 @@ function RoutePoint({
   value: string;
 }) {
   return (
-    <View style={styles.routePoint}>
-      <View style={styles.routeIconWrap}>
-        <Ionicons name={icon} size={16} color={teal} />
-      </View>
-      <View style={styles.routeTextWrap}>
-        <Text style={styles.routeLabel}>{label}</Text>
-        <Text style={styles.routeValue}>{value}</Text>
-      </View>
+    <View style={chipStyles.chip}>
+      <Ionicons name={icon} size={16} color={teal} />
+      <Text style={chipStyles.value}>{value}</Text>
+      <Text style={chipStyles.label}>{label}</Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#F4F8F7',
-    paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
-  },
-  container: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 34,
-  },
-  header: {
-    marginBottom: 16,
-  },
-  eyebrow: {
-    color: teal,
-    fontSize: 11,
-    fontWeight: '900',
-    marginBottom: 4,
-  },
-  title: {
-    color: '#102A28',
-    fontSize: 24,
-    fontWeight: '900',
-    marginBottom: 5,
-  },
-  subtitle: {
-    color: '#617C79',
-    fontSize: 13,
-    lineHeight: 19,
-    fontWeight: '600',
-  },
-  statusCard: {
-    borderRadius: 22,
-    backgroundColor: teal,
-    padding: 16,
-    marginBottom: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    shadowColor: '#005D5D',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    elevation: 5,
-  },
-  statusIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statusTextWrap: {
-    flex: 1,
-  },
-  statusTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '900',
-    marginBottom: 3,
-  },
-  statusSubtitle: {
-    color: 'rgba(255, 255, 255, 0.86)',
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '600',
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
-  },
-  summaryCard: {
+const chipStyles = StyleSheet.create({
+  chip: {
     flex: 1,
     borderRadius: 16,
     borderWidth: 1,
@@ -241,178 +476,91 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 8,
     alignItems: 'center',
+    gap: 3,
   },
-  summaryValue: {
-    color: '#102A28',
-    fontSize: 16,
-    fontWeight: '900',
-    marginTop: 6,
+  value: { fontSize: 16, fontWeight: '900', color: '#102A28' },
+  label: { fontSize: 11, fontWeight: '700', color: '#617C79' },
+});
+
+// ── Screen styles ─────────────────────────────────────────────────────────────
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#F4F8F7',
+    paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
   },
-  summaryLabel: {
-    color: '#617C79',
-    fontSize: 11,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  sectionHeadingWrap: {
-    marginBottom: 10,
-  },
-  sectionHeading: {
-    color: '#102A28',
-    fontSize: 19,
-    fontWeight: '800',
-    marginBottom: 2,
-  },
-  sectionSubheading: {
-    color: '#617C79',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  tripCard: {
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#D9E9E6',
-    backgroundColor: '#FFFFFF',
-    padding: 14,
-    marginBottom: 12,
-  },
-  tripHeader: {
+  header: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 12,
+    alignItems: 'flex-start',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
   },
-  timePill: {
-    minHeight: 30,
-    borderRadius: 15,
-    backgroundColor: '#E7F5F3',
-    paddingHorizontal: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  timePillText: {
+  eyebrow: {
     color: teal,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '900',
+    marginBottom: 2,
+    letterSpacing: 0.5,
   },
-  tripFare: {
+  title: {
     color: '#102A28',
-    fontSize: 16,
+    fontSize: 26,
     fontWeight: '900',
   },
-  routeBlock: {
-    borderRadius: 16,
-    backgroundColor: '#F7FBFA',
-    borderWidth: 1,
-    borderColor: '#D9E9E6',
-    padding: 12,
+  refreshBtn: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: '#E7F5F3',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: '#D9E9E6',
+    marginTop: 4,
   },
-  routePoint: {
+  summaryRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     gap: 10,
+    paddingHorizontal: 20,
+    marginBottom: 14,
   },
-  routeIconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    backgroundColor: '#E7F5F3',
+  list: {
+    paddingHorizontal: 20,
+    paddingTop: 4,
+    paddingBottom: 32,
+  },
+  loadingWrap: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  routeTextWrap: {
-    flex: 1,
-  },
-  routeLabel: {
-    color: '#617C79',
-    fontSize: 11,
-    fontWeight: '800',
-    marginBottom: 2,
-  },
-  routeValue: {
-    color: '#102A28',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  routeDivider: {
-    height: 1,
-    backgroundColor: '#D9E9E6',
-    marginVertical: 10,
-    marginLeft: 40,
-  },
-  tripFooter: {
-    minHeight: 38,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     gap: 12,
-    marginTop: 10,
   },
-  distanceText: {
-    color: '#617C79',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  detailButton: {
-    minHeight: 34,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#D9E9E6',
-    backgroundColor: '#E7F5F3',
-    paddingHorizontal: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  detailButtonText: {
+  loadingText: {
+    fontSize: 14,
+    fontWeight: '700',
     color: teal,
-    fontSize: 12,
-    fontWeight: '900',
   },
-  recentCard: {
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#D9E9E6',
-    backgroundColor: '#FFFFFF',
-    padding: 12,
-  },
-  recentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 11,
-  },
-  recentIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 11,
-    backgroundColor: '#E7F5F3',
+  errorWrap: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 12,
+    paddingHorizontal: 40,
   },
-  recentTextWrap: {
-    flex: 1,
-  },
-  recentRoute: {
-    color: '#102A28',
-    fontSize: 13,
-    fontWeight: '800',
-    marginBottom: 2,
-  },
-  recentStatus: {
-    color: '#617C79',
-    fontSize: 11,
+  errorText: {
+    fontSize: 14,
     fontWeight: '600',
+    color: '#617C79',
+    textAlign: 'center',
   },
-  recentFare: {
-    color: '#102A28',
-    fontSize: 13,
+  retryBtn: {
+    backgroundColor: teal,
+    paddingHorizontal: 28,
+    paddingVertical: 12,
+    borderRadius: 14,
+    marginTop: 4,
+  },
+  retryBtnText: {
+    color: '#FFF',
     fontWeight: '900',
-  },
-  inlineDivider: {
-    height: 1,
-    backgroundColor: '#D9E9E6',
-    marginVertical: 10,
+    fontSize: 14,
   },
 });
