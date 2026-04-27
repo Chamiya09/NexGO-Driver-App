@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo } from 'react';
 import {
   Alert,
   Platform,
@@ -27,34 +27,30 @@ type UploadDocument = {
   icon: keyof typeof Ionicons.glyphMap;
   status: DocumentStatus;
   updatedAt: string;
+  fileUrl?: string;
+  rejectionReason?: string;
 };
 
-const initialDocuments: UploadDocument[] = [
+const documentDefinitions = [
   {
     id: 'license',
     title: 'Driver License',
     subtitle: 'Front and back images of your valid license',
     icon: 'id-card-outline',
-    status: 'approved',
-    updatedAt: 'Updated Apr 21, 2026',
   },
   {
     id: 'insurance',
     title: 'Vehicle Insurance',
     subtitle: 'Active insurance document for your registered car',
     icon: 'shield-checkmark-outline',
-    status: 'review',
-    updatedAt: 'Submitted Apr 22, 2026',
   },
   {
     id: 'registration',
     title: 'Vehicle Registration',
     subtitle: 'Registration certificate matching your license plate',
     icon: 'document-text-outline',
-    status: 'missing',
-    updatedAt: 'Required before approval',
   },
-];
+] as const;
 
 const statusMeta = {
   approved: {
@@ -84,44 +80,53 @@ const statusMeta = {
 };
 
 const buildDocumentsFromDriver = (savedDocuments: SavedDriverDocument[] = []) =>
-  initialDocuments.map((document) => {
+  documentDefinitions.map((document) => {
     const savedDocument = savedDocuments.find((item) => item.documentType === document.id);
-    return savedDocument
-      ? {
-          ...document,
-          status: savedDocument.status,
-          updatedAt: savedDocument.submittedAt
-            ? `Submitted ${new Date(savedDocument.submittedAt).toLocaleDateString()}`
-            : document.updatedAt,
-        }
-      : document;
+
+    if (!savedDocument) {
+      return {
+        ...document,
+        status: 'missing' as const,
+        updatedAt: 'Required before approval',
+      };
+    }
+
+    const submittedLabel = savedDocument.submittedAt
+      ? `Submitted ${new Date(savedDocument.submittedAt).toLocaleDateString()}`
+      : 'Submitted for review';
+    const approvedLabel = savedDocument.reviewedAt
+      ? `Approved ${new Date(savedDocument.reviewedAt).toLocaleDateString()}`
+      : submittedLabel;
+    const rejectedLabel = savedDocument.reviewedAt
+      ? `Rejected ${new Date(savedDocument.reviewedAt).toLocaleDateString()}`
+      : submittedLabel;
+
+    return {
+      ...document,
+      status: savedDocument.status,
+      updatedAt:
+        savedDocument.status === 'approved'
+          ? approvedLabel
+          : savedDocument.status === 'rejected'
+            ? rejectedLabel
+            : savedDocument.status === 'review'
+              ? submittedLabel
+              : 'Required before approval',
+      fileUrl: savedDocument.fileUrl,
+      rejectionReason: savedDocument.rejectionReason,
+    };
   });
 
 export default function DriverDocumentUploadsScreen() {
   const { driver, updateDocument } = useDriverAuth();
-  const [documents, setDocuments] = useState(() => buildDocumentsFromDriver(driver?.documents));
+  const documents = useMemo(() => buildDocumentsFromDriver(driver?.documents), [driver?.documents]);
 
   const requiredCount = documents.length;
   const completeCount = documents.filter((document) => document.status === 'approved').length;
 
-  React.useEffect(() => {
-    setDocuments(buildDocumentsFromDriver(driver?.documents));
-  }, [driver?.documents]);
-
   const handleUpload = async (documentId: string) => {
     try {
       await updateDocument(documentId as 'license' | 'insurance' | 'registration', `mock://${documentId}-${Date.now()}`);
-      setDocuments((current) =>
-        current.map((document) =>
-          document.id === documentId
-            ? {
-                ...document,
-                status: 'review',
-                updatedAt: 'Submitted just now',
-              }
-            : document
-        )
-      );
       Alert.alert('Document submitted', 'This document has been saved and submitted for review.');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to submit document.';
@@ -212,7 +217,12 @@ function DocumentCard({ document, onUpload }: { document: UploadDocument; onUplo
       <View style={styles.inlineDivider} />
 
       <View style={styles.documentFooter}>
-        <Text style={styles.updatedText}>{document.updatedAt}</Text>
+        <View style={styles.updatedWrap}>
+          <Text style={styles.updatedText}>{document.updatedAt}</Text>
+          {document.status === 'rejected' && document.rejectionReason ? (
+            <Text style={styles.rejectionText}>{document.rejectionReason}</Text>
+          ) : null}
+        </View>
         <Pressable style={styles.uploadButton} onPress={onUpload}>
           <Ionicons name="cloud-upload-outline" size={15} color={teal} />
           <Text style={styles.uploadButtonText}>{actionLabel}</Text>
@@ -412,14 +422,23 @@ const styles = StyleSheet.create({
   },
   documentFooter: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 10,
   },
-  updatedText: {
+  updatedWrap: {
     flex: 1,
+    gap: 4,
+  },
+  updatedText: {
     color: '#617C79',
     fontSize: 12,
+    fontWeight: '600',
+  },
+  rejectionText: {
+    color: '#C13B3B',
+    fontSize: 11,
+    lineHeight: 16,
     fontWeight: '600',
   },
   uploadButton: {

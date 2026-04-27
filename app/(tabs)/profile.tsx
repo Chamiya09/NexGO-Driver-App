@@ -52,20 +52,29 @@ export default function DriverProfileScreen() {
   const { driver, logout } = useDriverAuth();
 
   const fullName = driver?.fullName || 'NexGO Driver';
+  const documents = driver?.documents || [];
   const initials = fullName
     .split(' ')
     .filter(Boolean)
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() || '')
     .join('');
-  const approvedDocuments = (driver?.documents || []).filter((document) => document.status === 'approved').length;
-  const documentCount = driver?.documents?.length || 3;
+  const approvedDocuments = documents.filter((document) => document.status === 'approved').length;
+  const documentCount = documents.length || 3;
+  const documentsNeedingAction = documents.filter((document) => document.status !== 'approved').length;
   const profileMetrics = [
     { label: 'Status', value: driver?.status || 'pending', icon: 'shield-checkmark-outline' as const },
     { label: 'Docs', value: `${approvedDocuments}/${documentCount}`, icon: 'document-text-outline' as const },
     { label: 'Security', value: driver?.security?.twoStepVerificationEnabled ? '2FA On' : '2FA Off', icon: 'shield-outline' as const },
   ];
-  const profileSections = baseProfileSections;
+  const profileSections = baseProfileSections.map((section) =>
+    section.route === '/profile/document-uploads'
+      ? {
+          ...section,
+          badge: documentsNeedingAction > 0 ? `${documentsNeedingAction} left` : 'READY',
+        }
+      : section
+  );
 
   const confirmLogout = () => {
     Alert.alert('Log out', 'Do you want to sign out of this driver device?', [
@@ -104,7 +113,7 @@ export default function DriverProfileScreen() {
             ))}
           </View>
 
-          <Pressable style={styles.quickActionButton}>
+          <Pressable style={styles.quickActionButton} onPress={() => router.push('/profile/document-uploads')}>
             <Text style={styles.quickActionText}>Open Driver Verification</Text>
             <Ionicons name="arrow-forward" size={17} color="#FFFFFF" />
           </Pressable>
