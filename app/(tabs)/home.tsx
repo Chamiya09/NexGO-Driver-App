@@ -154,7 +154,9 @@ export default function DriverHomeScreen() {
       setPassengerPins((prev) => prev.filter(p => p.rideId !== rideId));
     };
     driverSocket.on('remove_ride_request', onRemoveRide);
-    return () => driverSocket.off('remove_ride_request', onRemoveRide);
+    return () => {
+      driverSocket.off('remove_ride_request', onRemoveRide);
+    };
   }, []);
 
   // ── Online toggle ─────────────────────────────────────────────────────────
