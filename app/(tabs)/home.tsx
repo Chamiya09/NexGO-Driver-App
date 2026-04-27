@@ -16,6 +16,7 @@ import MapView, { Marker, UrlTile } from 'react-native-maps';
 import { useDriverAuth } from '@/context/driver-auth-context';
 import { useNotifications } from '@/context/notifications-context';
 import driverSocket from '@/lib/driverSocket';
+import { MAP_TILE_URL_TEMPLATE, MAP_TILE_USER_AGENT } from '@/lib/mapTiles';
 import {
   NotificationAlert,
   NotificationAlertRef,
@@ -224,7 +225,12 @@ export default function DriverHomeScreen() {
             latitudeDelta: 0.025,
             longitudeDelta: 0.025,
           }}>
-          <UrlTile urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maximumZ={19} flipY={false} />
+          <UrlTile
+            urlTemplate={MAP_TILE_URL_TEMPLATE}
+            maximumZ={19}
+            flipY={false}
+            userAgent={MAP_TILE_USER_AGENT}
+          />
 
           {/* ── Driver position marker ── */}
           <Marker coordinate={driverCoords} anchor={{ x: 0.5, y: 0.5 }}>

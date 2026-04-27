@@ -6,8 +6,6 @@ import React, { useCallback } from 'react';
 import {
   FlatList,
   Platform,
-  Pressable,
-  RefreshControl,
   StatusBar as RNStatusBar,
   StyleSheet,
   Text,

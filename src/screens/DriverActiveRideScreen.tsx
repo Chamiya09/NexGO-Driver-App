@@ -21,6 +21,7 @@ import MapViewDirections from 'react-native-maps-directions';
 import { Ionicons } from '@expo/vector-icons';
 import driverSocket from '@/lib/driverSocket';
 import { useDriverAuth } from '@/context/driver-auth-context';
+import { MAP_TILE_URL_TEMPLATE, MAP_TILE_USER_AGENT } from '@/lib/mapTiles';
 import {
   DriverRideStage,
   LatLng,
@@ -356,7 +357,12 @@ export default function DriverActiveRideScreen() {
           latitudeDelta: 0.06,
           longitudeDelta: 0.06,
         }}>
-        <UrlTile urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maximumZ={19} flipY={false} />
+        <UrlTile
+          urlTemplate={MAP_TILE_URL_TEMPLATE}
+          maximumZ={19}
+          flipY={false}
+          userAgent={MAP_TILE_USER_AGENT}
+        />
 
         {!isRouteFetched && !!googleApiKey && (
           <MapViewDirections
