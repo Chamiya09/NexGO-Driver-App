@@ -21,22 +21,22 @@ import { useDriverAuth } from '@/context/driver-auth-context';
 
 const teal = '#008080';
 
-const initialDriverDetails = {
-  fullName: 'Chamod Driver',
-  email: 'driver@nexgo.lk',
-  phoneNumber: '+94 77 123 4567',
-  emergencyContact: '+94 71 987 6543',
+const emptyDriverDetails = {
+  fullName: '',
+  email: '',
+  phoneNumber: '',
+  emergencyContact: '',
 };
 
-type DriverDetailsField = keyof typeof initialDriverDetails;
+type DriverDetailsField = keyof typeof emptyDriverDetails;
 
 export default function DriverPersonalDetailsScreen() {
   const { driver, updateProfile } = useDriverAuth();
   const driverDetails = useMemo(() => ({
-    fullName: driver?.fullName || initialDriverDetails.fullName,
-    email: driver?.email || initialDriverDetails.email,
-    phoneNumber: driver?.phoneNumber || initialDriverDetails.phoneNumber,
-    emergencyContact: driver?.emergencyContact || initialDriverDetails.emergencyContact,
+    fullName: driver?.fullName || emptyDriverDetails.fullName,
+    email: driver?.email || emptyDriverDetails.email,
+    phoneNumber: driver?.phoneNumber || emptyDriverDetails.phoneNumber,
+    emergencyContact: driver?.emergencyContact || emptyDriverDetails.emergencyContact,
   }), [driver?.email, driver?.emergencyContact, driver?.fullName, driver?.phoneNumber]);
   const [details, setDetails] = useState(driverDetails);
   const [form, setForm] = useState(driverDetails);
@@ -138,7 +138,7 @@ export default function DriverPersonalDetailsScreen() {
               </View>
 
               <View style={styles.heroIdentity}>
-                <Text style={styles.heroName}>{details.fullName}</Text>
+                <Text style={styles.heroName}>{details.fullName || 'Driver profile'}</Text>
                 <Text style={styles.heroSubline}>Driver profile and emergency contact details</Text>
               </View>
             </View>
@@ -300,6 +300,7 @@ function FormInput({
         keyboardType={keyboardType}
         autoCapitalize={keyboardType === 'email-address' ? 'none' : 'sentences'}
         autoCorrect={false}
+        placeholder="Not set"
         placeholderTextColor="#617C79"
         style={styles.input}
       />

@@ -1,7 +1,7 @@
-import React, { createContext, useCallback, useContext, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
 import { API_BASE_URL, parseApiResponse } from '@/lib/api';
-import { clearDriverToken, setDriverToken } from '@/lib/driver-session';
+import { clearDriverToken, getDriverToken, setDriverToken } from '@/lib/driver-session';
 
 export type DriverDocument = {
   documentType: 'license' | 'insurance' | 'registration';
@@ -92,6 +92,7 @@ type DriverAuthContextValue = {
   driver: DriverProfile | null;
   token: string | null;
   loading: boolean;
+  refreshDriver: () => Promise<void>;
   login: (payload: LoginPayload) => Promise<void>;
   register: (payload: RegisterPayload) => Promise<void>;
   updateProfile: (payload: UpdateProfilePayload) => Promise<void>;
@@ -109,7 +110,7 @@ const DriverAuthContext = createContext<DriverAuthContextValue | null>(null);
 
 export function DriverAuthProvider({ children }: { children: React.ReactNode }) {
   const [driver, setDriver] = useState<DriverProfile | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(() => getDriverToken());
   const [loading, setLoading] = useState(false);
 
   const persistAuth = (nextToken: string, nextDriver: DriverProfile) => {
@@ -187,6 +188,19 @@ export function DriverAuthProvider({ children }: { children: React.ReactNode }) 
         Authorization: `Bearer ${nextToken}`,
       },
       body: JSON.stringify(payload),
+    });
+
+    const data = await parseApiResponse<DriverResponse>(response);
+    setDriver(data.driver);
+  };
+
+  const refreshDriver = async () => {
+    const nextToken = requireToken();
+    const response = await fetch(`${API_BASE_URL}/driver-auth/me`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${nextToken}`,
+      },
     });
 
     const data = await parseApiResponse<DriverResponse>(response);
@@ -322,22 +336,32 @@ export function DriverAuthProvider({ children }: { children: React.ReactNode }) 
     clearDriverToken();
   };
 
-  const value = {
-    driver,
-    token,
-    loading,
-    login,
-    register,
-    updateProfile,
-    changePassword,
-    getVehicle,
-    createVehicle,
-    updateVehicle,
-    deleteVehicle,
-    updateDocument,
-    updateSecurity,
-    logout,
-  };
+  useEffect(() => {
+    if (!token) {
+      return;
+    }
+
+    refreshDriver().catch(() => {
+      logout();
+    });
+  }, [token]);
+
+  const value = useMemo(
+    () => ({
+      driver,
+      token,
+      loading,
+      refreshDriver,
+      login,
+      register,
+      updateProfile,
+      changePassword,
+      updateDocument,
+      updateSecurity,
+      logout,
+    }),
+    [driver, token, loading]
+  );
 
   return <DriverAuthContext.Provider value={value}>{children}</DriverAuthContext.Provider>;
 }
