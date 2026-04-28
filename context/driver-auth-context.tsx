@@ -30,6 +30,7 @@ export type DriverProfile = {
   emergencyContact?: string;
   profileImageUrl?: string;
   status?: string;
+  isOnline?: boolean;
   documents?: DriverDocument[];
   vehicle?: DriverVehicle | null;
   security?: {

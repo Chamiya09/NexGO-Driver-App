@@ -54,12 +54,21 @@ export default function DriverHomeScreen() {
   const [passengerPins, setPassengerPins] = useState<PassengerPin[]>([]);
   const isOnlineRef = useRef(false);
   const driverCoordsRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const hydratedOnlineRef = useRef(false);
 
   const [driverCoords, setDriverCoords] = useState<{ latitude: number; longitude: number } | null>(null);
 
   useEffect(() => {
     driverCoordsRef.current = driverCoords;
   }, [driverCoords]);
+
+  useEffect(() => {
+    if (hydratedOnlineRef.current || typeof driver?.isOnline !== 'boolean') return;
+
+    hydratedOnlineRef.current = true;
+    isOnlineRef.current = driver.isOnline;
+    setIsOnline(driver.isOnline);
+  }, [driver?.isOnline]);
 
   // ── Setup Location ───────────────────────────────────────────────────────
   useEffect(() => {

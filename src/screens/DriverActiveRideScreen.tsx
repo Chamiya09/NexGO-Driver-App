@@ -39,6 +39,7 @@ const DEEP_BLUE = '#114B7A';
 const NAVIGATION_ANIMATION_MS = 950;
 const NAVIGATION_ZOOM = 18;
 const NAVIGATION_PITCH = 58;
+const ROUTE_REFRESH_DISTANCE_METERS = 80;
 
 function normalizeHeadingDelta(delta: number) {
   if (delta > 180) return delta - 360;
@@ -114,6 +115,26 @@ function createDirectRoute(origin: LatLng, destination: LatLng): LatLng[] {
   return [origin, destination];
 }
 
+function samePoint(a: LatLng, b: LatLng) {
+  return a.latitude === b.latitude && a.longitude === b.longitude;
+}
+
+function distanceMeters(a: LatLng, b: LatLng) {
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const earthMeters = 6371000;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLng = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
+
+  const h =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+
+  return earthMeters * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
 export default function DriverActiveRideScreen() {
   const router = useRouter();
   const mapRef = useRef<MapView>(null);
@@ -163,12 +184,13 @@ export default function DriverActiveRideScreen() {
   const [actionStatus, setActionStatus] = useState<RideActionStatus>(normalizeStatus(params.status));
   const [navigationRoute, setNavigationRoute] = useState<LatLng[]>(() => createDirectRoute(initialDriverPosition, pickup));
   const [tripRoute, setTripRoute] = useState<LatLng[]>(() => createDirectRoute(pickup, dropoff));
-  const [remainingRoute, setRemainingRoute] = useState<LatLng[]>([]);
+  const [remainingRoute, setRemainingRoute] = useState<LatLng[]>(() => createDirectRoute(initialDriverPosition, pickup));
   const [distanceLabel, setDistanceLabel] = useState('—');
   const [durationLabel, setDurationLabel] = useState('—');
   const [isLoadingRoute, setIsLoadingRoute] = useState(true);
   const [isActionBusy, setIsActionBusy] = useState(false);
   const [isRotationEnabled, setIsRotationEnabled] = useState(true);
+  const navigationRouteOriginRef = useRef<LatLng>(initialDriverPosition);
 
   const stage: DriverRideStage = actionStatus === 'ACCEPTED' ? 'TO_PICKUP' : 'IN_TRANSIT';
   const highlightedRoute = remainingRoute.length > 1
@@ -260,15 +282,32 @@ export default function DriverActiveRideScreen() {
       };
       driverPositionRef.current = next;
 
+      if (stage === 'TO_PICKUP') {
+        const currentNavigationOrigin = navigationRouteOriginRef.current;
+        const shouldRefreshRoute =
+          !didRefreshNavigationFromGpsRef.current ||
+          samePoint(currentNavigationOrigin, pickup) ||
+          distanceMeters(currentNavigationOrigin, next) > ROUTE_REFRESH_DISTANCE_METERS;
+
+        const directNavigationRoute = createDirectRoute(next, pickup);
+        if (directNavigationRoute.length > 1) {
+          navigationRouteOriginRef.current = next;
+          setNavigationRoute(directNavigationRoute);
+          setRemainingRoute(directNavigationRoute);
+        }
+
+        if (!shouldRefreshRoute) {
+          didRefreshNavigationFromGpsRef.current = true;
+        }
+      }
+
       if (!didRefreshNavigationFromGpsRef.current && stage === 'TO_PICKUP') {
         didRefreshNavigationFromGpsRef.current = true;
-        const directNavigationRoute = createDirectRoute(next, pickup);
-        setNavigationRoute(directNavigationRoute);
-        setRemainingRoute(sliceRemainingPolyline(directNavigationRoute, next));
 
         fetchFastRoutePath(next, pickup)
           .then((route) => {
             if (!trackingActive) return;
+            navigationRouteOriginRef.current = next;
             setNavigationRoute(route.coordinates);
             setRemainingRoute(sliceRemainingPolyline(route.coordinates, next));
             setDistanceLabel(formatDistance(route.distanceMeters));
@@ -336,14 +375,11 @@ export default function DriverActiveRideScreen() {
       const permission = await Location.requestForegroundPermissionsAsync();
       if (permission.status !== 'granted') return;
 
-      const lastKnown = await Location.getLastKnownPositionAsync({
-        maxAge: 10_000,
-        requiredAccuracy: 100,
-      });
+      const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: 60_000 });
       if (trackingActive && lastKnown) applyDriverLocation(lastKnown);
 
       Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.BestForNavigation,
+        accuracy: Location.Accuracy.Balanced,
       })
         .then((location) => {
           if (trackingActive) applyDriverLocation(location);
