@@ -32,6 +32,7 @@ type NotificationsContextValue = {
   addNotification: (n: Omit<RideNotification, 'receivedAt' | 'read' | 'id'>) => void;
   markAllRead: () => void;
   markRead: (rideId: string) => void;
+  removeNotification: (rideId: string) => void;
   clearAll: () => void;
 };
 
@@ -70,13 +71,17 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     );
   }, []);
 
+  const removeNotification = useCallback((rideId: string) => {
+    setNotifications((prev) => prev.filter((n) => n.rideId !== rideId));
+  }, []);
+
   const clearAll = useCallback(() => setNotifications([]), []);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
     <NotificationsContext.Provider
-      value={{ notifications, unreadCount, addNotification, markAllRead, markRead, clearAll }}>
+      value={{ notifications, unreadCount, addNotification, markAllRead, markRead, removeNotification, clearAll }}>
       {children}
     </NotificationsContext.Provider>
   );

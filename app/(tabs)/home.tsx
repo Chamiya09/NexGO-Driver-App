@@ -48,7 +48,7 @@ const normalizeVehicleCategory = (category?: string | null) => {
 export default function DriverHomeScreen() {
   const { driver } = useDriverAuth();
   const router = useRouter();
-  const { addNotification } = useNotifications();
+  const { addNotification, removeNotification } = useNotifications();
   const mapRef = useRef<MapView>(null);
   const alertRef = useRef<NotificationAlertRef>(null);
 
@@ -175,12 +175,14 @@ export default function DriverHomeScreen() {
   useEffect(() => {
     const onRemoveRide = ({ rideId }: { rideId: string }) => {
       setPassengerPins((prev) => prev.filter(p => p.rideId !== rideId));
+      removeNotification(rideId);
+      alertRef.current?.dismiss();
     };
     driverSocket.on('remove_ride_request', onRemoveRide);
     return () => {
       driverSocket.off('remove_ride_request', onRemoveRide);
     };
-  }, []);
+  }, [removeNotification]);
 
   // ── Online toggle ─────────────────────────────────────────────────────────
   const handleToggleOnline = (value: boolean) => {
