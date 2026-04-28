@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { API_BASE_URL, parseApiResponse } from '@/lib/api';
 import { clearDriverToken, getDriverToken, setDriverToken } from '@/lib/driver-session';
@@ -356,6 +356,10 @@ export function DriverAuthProvider({ children }: { children: React.ReactNode }) 
       register,
       updateProfile,
       changePassword,
+      getVehicle,
+      createVehicle,
+      updateVehicle,
+      deleteVehicle,
       updateDocument,
       updateSecurity,
       logout,

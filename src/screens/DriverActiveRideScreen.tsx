@@ -21,7 +21,7 @@ import MapViewDirections from 'react-native-maps-directions';
 import { Ionicons } from '@expo/vector-icons';
 import driverSocket from '@/lib/driverSocket';
 import { useDriverAuth } from '@/context/driver-auth-context';
-import { MAP_TILE_URL_TEMPLATE, MAP_TILE_USER_AGENT } from '@/lib/mapTiles';
+import { MAP_TILE_URL_TEMPLATE } from '@/lib/mapTiles';
 import {
   DriverRideStage,
   LatLng,
@@ -361,7 +361,6 @@ export default function DriverActiveRideScreen() {
           urlTemplate={MAP_TILE_URL_TEMPLATE}
           maximumZ={19}
           flipY={false}
-          userAgent={MAP_TILE_USER_AGENT}
         />
 
         {!isRouteFetched && !!googleApiKey && (

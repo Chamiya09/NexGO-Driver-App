@@ -14,7 +14,7 @@ import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useDriverAuth } from '@/context/driver-auth-context';
 import driverSocket from '@/lib/driverSocket';
-import { MAP_TILE_URL_TEMPLATE, MAP_TILE_USER_AGENT } from '@/lib/mapTiles';
+import { MAP_TILE_URL_TEMPLATE } from '@/lib/mapTiles';
 
 const teal = '#008080';
 
@@ -202,7 +202,6 @@ export default function RidePreviewScreen() {
           urlTemplate={MAP_TILE_URL_TEMPLATE}
           maximumZ={19}
           flipY={false}
-          userAgent={MAP_TILE_USER_AGENT}
         />
 
         {/* Driver position marker (navigate mode) */}

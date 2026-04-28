@@ -16,7 +16,7 @@ import MapView, { Marker, UrlTile } from 'react-native-maps';
 import { useDriverAuth } from '@/context/driver-auth-context';
 import { useNotifications } from '@/context/notifications-context';
 import driverSocket from '@/lib/driverSocket';
-import { MAP_TILE_URL_TEMPLATE, MAP_TILE_USER_AGENT } from '@/lib/mapTiles';
+import { MAP_TILE_URL_TEMPLATE } from '@/lib/mapTiles';
 import {
   NotificationAlert,
   NotificationAlertRef,
@@ -229,7 +229,6 @@ export default function DriverHomeScreen() {
             urlTemplate={MAP_TILE_URL_TEMPLATE}
             maximumZ={19}
             flipY={false}
-            userAgent={MAP_TILE_USER_AGENT}
           />
 
           {/* ── Driver position marker ── */}
