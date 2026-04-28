@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useDriverAuth } from '@/context/driver-auth-context';
 import { API_BASE_URL } from '@/lib/api';
@@ -377,6 +377,13 @@ export default function DriverTripsScreen() {
     fetchRides();
     loadLatestNavigation();
   }, [fetchRides, loadLatestNavigation]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadLatestNavigation();
+      void fetchRides(true);
+    }, [fetchRides, loadLatestNavigation])
+  );
 
   // ── Socket: real-time status updates ──────────────────────────────────────
   useEffect(() => {
