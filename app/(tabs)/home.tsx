@@ -300,19 +300,6 @@ export default function DriverHomeScreen() {
         </MapView>
       )}
 
-      {/* ── Offline Overlay ── */}
-      {driverCoords && !isOnline && (
-        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(234, 230, 223, 0.85)', zIndex: 10, justifyContent: 'center', alignItems: 'center' }]} pointerEvents="box-none">
-          <View style={{ backgroundColor: '#FFFFFF', paddingHorizontal: 30, paddingVertical: 24, borderRadius: 28, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 18, elevation: 12, borderWidth: 1, borderColor: '#D9E9E6' }}>
-            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#E7F5F3', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
-              <Ionicons name="car-outline" size={32} color="#102A28" />
-            </View>
-            <Text style={{ fontSize: 20, fontWeight: '900', color: '#102A28' }}>You are Offline</Text>
-            <Text style={{ fontSize: 15, fontWeight: '600', color: '#617C79', marginTop: 4 }}>Go Online to receive rides</Text>
-          </View>
-        </View>
-      )}
-
       {/*
         NotificationAlert MUST be at the root View level (not inside SafeAreaView)
         so its position:absolute uses the full screen coordinate space.
