@@ -205,6 +205,7 @@ export default function DriverActiveRideScreen() {
   const [arrivalCode, setArrivalCode] = useState('');
   const [requestedArrivalCode, setRequestedArrivalCode] = useState('');
   const [arrivalCodeError, setArrivalCodeError] = useState('');
+  const [tripCompletedVisible, setTripCompletedVisible] = useState(false);
   const navigationRouteOriginRef = useRef<LatLng>(initialDriverPosition);
   const hasNavigationOsrmRouteRef = useRef(false);
   const navigationRouteRequestIdRef = useRef(0);
@@ -539,9 +540,7 @@ export default function DriverActiveRideScreen() {
       if (canonical === 'IN_TRANSIT' || canonical === 'INPROGRESS') setActionStatus('IN_TRANSIT');
       if (canonical === 'COMPLETED') {
         clearDriverActiveRide();
-        Alert.alert('Trip completed', 'Ride completed successfully.', [
-          { text: 'OK', onPress: () => router.replace('/(tabs)/home') },
-        ]);
+        setTripCompletedVisible(true);
       }
       if (canonical === 'CANCELLED') {
         clearDriverActiveRide();
@@ -865,6 +864,26 @@ export default function DriverActiveRideScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={tripCompletedVisible} transparent animationType="fade" statusBarTranslucent>
+        <View style={styles.codeBackdrop}>
+          <View style={styles.completedCard}>
+            <View style={styles.completedIcon}>
+              <Ionicons name="checkmark-done" size={30} color={TEAL} />
+            </View>
+            <Text style={styles.codeTitle}>Trip Completed</Text>
+            <Text style={styles.codeSubtitle}>Ride completed successfully. You can now return to the driver home screen.</Text>
+            <Pressable
+              style={styles.completedButton}
+              onPress={() => {
+                setTripCompletedVisible(false);
+                router.replace('/(tabs)/home');
+              }}>
+              <Text style={styles.codeButtonText}>Back to Home</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1019,6 +1038,25 @@ const styles = StyleSheet.create({
     padding: 22,
     alignItems: 'center',
   },
+  completedCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+  },
+  completedIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#E7F5F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#BFE7E2',
+  },
   codeCloseButton: {
     position: 'absolute',
     top: 12,
@@ -1089,6 +1127,15 @@ const styles = StyleSheet.create({
   },
   codeButtonDisabled: { opacity: 0.72 },
   codeButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '900' },
+  completedButton: {
+    width: '100%',
+    height: 54,
+    borderRadius: 16,
+    backgroundColor: TEAL,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
   resendCodeButton: {
     minHeight: 44,
     marginTop: 10,
