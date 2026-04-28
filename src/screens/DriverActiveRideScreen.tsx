@@ -806,6 +806,16 @@ export default function DriverActiveRideScreen() {
         }}>
         <View style={styles.codeBackdrop}>
           <View style={styles.codeCard}>
+            <Pressable
+              style={styles.codeCloseButton}
+              onPress={() => {
+                if (!isActionBusy) setArrivalCodeVisible(false);
+              }}
+              disabled={isActionBusy}
+              accessibilityRole="button"
+              accessibilityLabel="Close confirm passenger popup">
+              <Ionicons name="close" size={20} color="#4D6F6C" />
+            </Pressable>
             <View style={styles.codeIcon}>
               <Ionicons name="shield-checkmark" size={30} color={TEAL} />
             </View>
@@ -1008,6 +1018,18 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 22,
     alignItems: 'center',
+  },
+  codeCloseButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F0F7F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
   },
   codeIcon: {
     width: 58,
