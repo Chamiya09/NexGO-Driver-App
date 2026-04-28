@@ -23,6 +23,7 @@ import { Ionicons } from '@expo/vector-icons';
 import driverSocket from '@/lib/driverSocket';
 import { useDriverAuth } from '@/context/driver-auth-context';
 import { MAP_TILE_URL_TEMPLATE } from '@/lib/mapTiles';
+import { clearDriverActiveRide, saveDriverActiveRide } from '@/lib/activeRideStorage';
 import {
   DriverRideStage,
   LatLng,
@@ -52,6 +53,12 @@ function normalizeHeadingDelta(delta: number) {
 
 function smoothHeading(previous: number, next: number, factor = 0.38) {
   return previous + normalizeHeadingDelta(next - previous) * factor;
+}
+
+function actionStatusToParam(status: RideActionStatus): string {
+  if (status === 'ARRIVED') return 'ARRIVED';
+  if (status === 'IN_TRANSIT') return 'IN_TRANSIT';
+  return 'ACCEPTED';
 }
 
 type RideActionStatus = 'ACCEPTED' | 'ARRIVED' | 'IN_TRANSIT';
@@ -210,6 +217,48 @@ export default function DriverActiveRideScreen() {
     : stage === 'TO_PICKUP'
       ? navigationRoute
       : tripRoute;
+
+  useEffect(() => {
+    if (!rideId) return;
+
+    const storedParams = {
+      id: rideId,
+      status: actionStatusToParam(actionStatus),
+      passengerName,
+      passengerRating,
+      vehicleType: params.vehicleType ?? '',
+      price: params.price ?? '',
+      pLat: String(pickup.latitude),
+      pLng: String(pickup.longitude),
+      pName: pickupName,
+      dLat: String(dropoff.latitude),
+      dLng: String(dropoff.longitude),
+      dName: dropoffName,
+      ...(Number.isFinite(initialDriverPosition.latitude) && Number.isFinite(initialDriverPosition.longitude)
+        ? {
+            drLat: String(initialDriverPosition.latitude),
+            drLng: String(initialDriverPosition.longitude),
+          }
+        : {}),
+    };
+
+    saveDriverActiveRide(storedParams);
+  }, [
+    actionStatus,
+    dropoff.latitude,
+    dropoff.longitude,
+    dropoffName,
+    initialDriverPosition.latitude,
+    initialDriverPosition.longitude,
+    params.price,
+    params.vehicleType,
+    passengerName,
+    passengerRating,
+    pickup.latitude,
+    pickup.longitude,
+    pickupName,
+    rideId,
+  ]);
 
   useEffect(() => {
     const nextRemainingRoute =
@@ -487,11 +536,13 @@ export default function DriverActiveRideScreen() {
       }
       if (canonical === 'IN_TRANSIT' || canonical === 'INPROGRESS') setActionStatus('IN_TRANSIT');
       if (canonical === 'COMPLETED') {
+        clearDriverActiveRide();
         Alert.alert('Trip completed', 'Ride completed successfully.', [
           { text: 'OK', onPress: () => router.replace('/(tabs)/home') },
         ]);
       }
       if (canonical === 'CANCELLED') {
+        clearDriverActiveRide();
         Alert.alert('Ride cancelled', 'The passenger cancelled this ride.', [
           { text: 'OK', onPress: () => router.replace('/(tabs)/home') },
         ]);

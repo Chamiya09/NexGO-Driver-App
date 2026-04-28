@@ -13,10 +13,16 @@ import {
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useDriverAuth } from '@/context/driver-auth-context';
 import { API_BASE_URL } from '@/lib/api';
 import driverSocket from '@/lib/driverSocket';
+import {
+  clearDriverActiveRide,
+  DriverActiveRideParams,
+  loadDriverActiveRide,
+} from '@/lib/activeRideStorage';
 
 // Driver App Primary Teal Theme
 const teal = '#008080';
@@ -318,11 +324,18 @@ const emptyStyles = StyleSheet.create({
 // ── Main Screen ───────────────────────────────────────────────────────────────
 export default function DriverTripsScreen() {
   const { driver, token } = useDriverAuth();
+  const router = useRouter();
 
   const [rides, setRides] = useState<Ride[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [latestNavigation, setLatestNavigation] = useState<DriverActiveRideParams | null>(null);
+
+  const loadLatestNavigation = useCallback(async () => {
+    const stored = await loadDriverActiveRide();
+    setLatestNavigation(stored);
+  }, []);
 
   // ── Fetch rides from API ───────────────────────────────────────────────────
   const fetchRides = useCallback(async (isRefresh = false) => {
@@ -362,7 +375,8 @@ export default function DriverTripsScreen() {
   // Initial load
   useEffect(() => {
     fetchRides();
-  }, [fetchRides]);
+    loadLatestNavigation();
+  }, [fetchRides, loadLatestNavigation]);
 
   // ── Socket: real-time status updates ──────────────────────────────────────
   useEffect(() => {
@@ -382,9 +396,28 @@ export default function DriverTripsScreen() {
     };
   }, [driver?.id]);
 
+  useEffect(() => {
+    if (!latestNavigation) return;
+
+    const matchedRide = rides.find((ride) => ride.id === latestNavigation.id);
+    if (!matchedRide) return;
+
+    if (matchedRide.status === 'Completed' || matchedRide.status === 'Cancelled') {
+      clearDriverActiveRide();
+      setLatestNavigation(null);
+    }
+  }, [latestNavigation, rides]);
+
   // ── Summary counts ─────────────────────────────────────────────────────────
   const activeCount = rides.filter((r) => r.status === 'Accepted' || r.status === 'InProgress').length;
   const completedCount = rides.filter((r) => r.status === 'Completed').length;
+  const latestRide = latestNavigation
+    ? rides.find((ride) => ride.id === latestNavigation.id)
+    : null;
+  const canResumeNavigation = Boolean(
+    latestNavigation &&
+    (!latestRide || (latestRide.status !== 'Completed' && latestRide.status !== 'Cancelled'))
+  );
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -409,6 +442,31 @@ export default function DriverTripsScreen() {
           <SummaryChip icon="car-sport-outline" label="Active" value={String(activeCount)} />
           <SummaryChip icon="checkmark-done-outline" label="Done" value={String(completedCount)} />
         </View>
+      )}
+
+      {canResumeNavigation && (
+        <TouchableOpacity
+          style={styles.resumeNavBtn}
+          onPress={() =>
+            router.push({
+              pathname: '/active-ride/[id]',
+              params: latestNavigation ?? {},
+            })
+          }
+        >
+          <View style={styles.resumeNavIcon}>
+            <Ionicons name="navigate" size={18} color="#FFFFFF" />
+          </View>
+          <View style={styles.resumeNavTextWrap}>
+            <Text style={styles.resumeNavTitle}>Return to live navigation</Text>
+            <Text style={styles.resumeNavSubtitle}>
+              {latestRide?.status === 'InProgress'
+                ? 'Ride in progress'
+                : 'Driver heading to pickup'}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="#FFFFFF" />
+        </TouchableOpacity>
       )}
 
       {/* Content */}
@@ -521,6 +579,44 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 20,
     marginBottom: 14,
+  },
+  resumeNavBtn: {
+    marginHorizontal: 20,
+    marginBottom: 14,
+    backgroundColor: teal,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  resumeNavIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resumeNavTextWrap: {
+    flex: 1,
+  },
+  resumeNavTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  resumeNavSubtitle: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
   },
   list: {
     paddingHorizontal: 20,
