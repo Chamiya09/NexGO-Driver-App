@@ -7,9 +7,11 @@ import React, {
   createContext,
   useCallback,
   useContext,
-  useRef,
+  useEffect,
   useState,
 } from 'react';
+
+import driverSocket from '@/lib/driverSocket';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export type RideNotification = {
@@ -76,6 +78,18 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   }, []);
 
   const clearAll = useCallback(() => setNotifications([]), []);
+
+  useEffect(() => {
+    const handleRemoveRideRequest = ({ rideId }: { rideId?: string }) => {
+      if (!rideId) return;
+      removeNotification(rideId);
+    };
+
+    driverSocket.on('remove_ride_request', handleRemoveRideRequest);
+    return () => {
+      driverSocket.off('remove_ride_request', handleRemoveRideRequest);
+    };
+  }, [removeNotification]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 

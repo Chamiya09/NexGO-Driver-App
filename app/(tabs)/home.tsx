@@ -38,13 +38,6 @@ type PassengerPin = {
   longitude: number;
 };
 
-const normalizeVehicleCategory = (category?: string | null) => {
-  const value = String(category ?? '').trim();
-  if (value === 'TukTuk') return 'Tuk';
-  if (value === 'Sedan') return 'Car';
-  return value;
-};
-
 export default function DriverHomeScreen() {
   const { driver } = useDriverAuth();
   const router = useRouter();
@@ -117,16 +110,6 @@ export default function DriverHomeScreen() {
   useEffect(() => {
     const onIncomingRide = (rideData: RideNotificationData) => {
       console.log('[Driver] incomingRide received:', rideData);
-
-      const driverCategory = normalizeVehicleCategory(driver?.vehicle?.category);
-      const requestedCategory = normalizeVehicleCategory(rideData.vehicleType);
-
-      if (!driverCategory || driverCategory !== requestedCategory) {
-        console.log(
-          `[Driver] Ride ignored - requested ${requestedCategory || 'unknown'} but driver vehicle is ${driverCategory || 'not added'}`
-        );
-        return;
-      }
 
       const computedDistance = driverCoords ? haversineKm(
         driverCoords.latitude, driverCoords.longitude,
