@@ -45,7 +45,7 @@ type PassengerPin = {
 export default function DriverHomeScreen() {
   const { driver } = useDriverAuth();
   const router = useRouter();
-  const { addNotification, removeNotification } = useNotifications();
+  const { addNotification, removeNotification, clearAll } = useNotifications();
   const mapRef = useRef<MapView>(null);
   const alertRef = useRef<NotificationAlertRef>(null);
 
@@ -144,6 +144,12 @@ export default function DriverHomeScreen() {
     const onIncomingRide = (rideData: RideNotificationData) => {
       console.log('[Driver] incomingRide received:', rideData);
 
+      if (!isOnlineRef.current) {
+        console.log('[Driver] Incoming ride ignored - driver is Offline');
+        alertRef.current?.dismiss();
+        return;
+      }
+
       const computedDistance = driverCoords ? haversineKm(
         driverCoords.latitude, driverCoords.longitude,
         rideData.pickup.latitude, rideData.pickup.longitude,
@@ -210,7 +216,11 @@ export default function DriverHomeScreen() {
     setIsOnline(value);
 
     // Attempt local notifications cleanups while pushing database updates asynchronously
-    if (!value) alertRef.current?.dismiss();
+    if (!value) {
+      alertRef.current?.dismiss();
+      setPassengerPins([]);
+      clearAll();
+    }
     driverSocket.emit('toggle_online_status', { driverId: driver?.id, isOnline: value });
 
     if (driverCoords) {
