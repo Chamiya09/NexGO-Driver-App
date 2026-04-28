@@ -195,6 +195,9 @@ export default function DriverActiveRideScreen() {
   const navigationRouteOriginRef = useRef<LatLng>(initialDriverPosition);
   const hasNavigationOsrmRouteRef = useRef(false);
   const navigationRouteRequestIdRef = useRef(0);
+  const tripRouteOriginRef = useRef<LatLng>(pickup);
+  const hasTripOsrmRouteRef = useRef(false);
+  const tripRouteRequestIdRef = useRef(0);
 
   const stage: DriverRideStage = actionStatus === 'ACCEPTED' ? 'TO_PICKUP' : 'IN_TRANSIT';
   const highlightedRoute = remainingRoute.length > 1
@@ -219,7 +222,8 @@ export default function DriverActiveRideScreen() {
     const hydrateFastRoutes = async () => {
       const routeOrigin = driverPositionRef.current;
       const directNavigationRoute = createDirectRoute(routeOrigin, pickup);
-      const directTripRoute = createDirectRoute(pickup, dropoff);
+      const tripOrigin = stage === 'TO_PICKUP' ? pickup : routeOrigin;
+      const directTripRoute = createDirectRoute(tripOrigin, dropoff);
       if (!hasNavigationOsrmRouteRef.current) {
         setNavigationRoute(directNavigationRoute);
         setRemainingRoute(stage === 'TO_PICKUP' ? sliceRemainingPolyline(directNavigationRoute, routeOrigin) : directTripRoute);
@@ -244,12 +248,15 @@ export default function DriverActiveRideScreen() {
           console.error('[ActiveRide] OSRM navigation route failed:', error);
         });
 
-      fetchFastRoutePath(pickup, dropoff)
+      const tripRequestId = ++tripRouteRequestIdRef.current;
+      fetchFastRoutePath(tripOrigin, dropoff)
         .then((route) => {
-          if (!active) return;
+          if (!active || tripRequestId !== tripRouteRequestIdRef.current) return;
+          hasTripOsrmRouteRef.current = true;
+          tripRouteOriginRef.current = tripOrigin;
           setTripRoute(route.coordinates);
           if (stage === 'IN_TRANSIT') {
-            setRemainingRoute(sliceRemainingPolyline(route.coordinates, routeOrigin));
+            setRemainingRoute(sliceRemainingPolyline(route.coordinates, tripOrigin));
             setDistanceLabel(formatDistance(route.distanceMeters));
             setDurationLabel(formatDuration(route.durationSeconds));
           }
@@ -359,6 +366,40 @@ export default function DriverActiveRideScreen() {
         }
       }
 
+      if (stage === 'IN_TRANSIT') {
+        const currentTripOrigin = tripRouteOriginRef.current;
+        const shouldRefreshTripRoute =
+          !hasTripOsrmRouteRef.current ||
+          samePoint(currentTripOrigin, pickup) ||
+          distanceMeters(currentTripOrigin, next) > ROUTE_REFRESH_DISTANCE_METERS;
+
+        const directTripRoute = createDirectRoute(next, dropoff);
+        if (!hasTripOsrmRouteRef.current && directTripRoute.length > 1) {
+          tripRouteOriginRef.current = next;
+          setTripRoute(directTripRoute);
+          setRemainingRoute(directTripRoute);
+        }
+
+        if (shouldRefreshTripRoute) {
+          tripRouteOriginRef.current = next;
+          const tripRequestId = ++tripRouteRequestIdRef.current;
+
+          fetchFastRoutePath(next, dropoff)
+            .then((route) => {
+              if (!trackingActive || tripRequestId !== tripRouteRequestIdRef.current) return;
+              hasTripOsrmRouteRef.current = true;
+              tripRouteOriginRef.current = next;
+              setTripRoute(route.coordinates);
+              setRemainingRoute(sliceRemainingPolyline(route.coordinates, next));
+              setDistanceLabel(formatDistance(route.distanceMeters));
+              setDurationLabel(formatDuration(route.durationSeconds));
+            })
+            .catch((error) => {
+              console.error('[ActiveRide] live OSRM trip route failed:', error);
+            });
+        }
+      }
+
       const reportedHeading =
         typeof location.coords.heading === 'number' && location.coords.heading >= 0
           ? location.coords.heading
@@ -463,7 +504,7 @@ export default function DriverActiveRideScreen() {
       driverSocket.off('rideCancelled', handleStatusUpdate);
       driverSocket.off('rideError', handleRideError);
     };
-  }, [animatedDrCoords, driver?.id, driver?.vehicle?.category, headingAnim, pickup, rideId, router, stage]);
+  }, [animatedDrCoords, driver?.id, driver?.vehicle?.category, dropoff, headingAnim, pickup, rideId, router, stage]);
 
   const transitionRide = (eventName: 'driver_arrived' | 'start_trip' | 'complete_trip', optimistic: RideActionStatus) => {
     if (!driver?.id || !rideId || isActionBusy) return;
