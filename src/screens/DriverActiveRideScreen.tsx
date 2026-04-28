@@ -4,10 +4,12 @@ import {
   Alert,
   Image,
   LayoutAnimation,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   UIManager,
   View,
   Animated,
@@ -192,6 +194,9 @@ export default function DriverActiveRideScreen() {
   const [isActionBusy, setIsActionBusy] = useState(false);
   const [isRotationEnabled, setIsRotationEnabled] = useState(true);
   const [mapReady, setMapReady] = useState(false);
+  const [arrivalCodeVisible, setArrivalCodeVisible] = useState(false);
+  const [arrivalCode, setArrivalCode] = useState('');
+  const [arrivalCodeError, setArrivalCodeError] = useState('');
   const navigationRouteOriginRef = useRef<LatLng>(initialDriverPosition);
   const hasNavigationOsrmRouteRef = useRef(false);
   const navigationRouteRequestIdRef = useRef(0);
@@ -488,13 +493,25 @@ export default function DriverActiveRideScreen() {
     };
 
     const handleRideError = (payload: { message?: string }) => {
-      if (payload?.message) Alert.alert('Ride update failed', payload.message);
+      if ((payload as { code?: string })?.code === 'INVALID_ARRIVAL_CODE') {
+        setArrivalCodeError(payload?.message || 'Incorrect passenger code.');
+      } else if (payload?.message) {
+        Alert.alert('Ride update failed', payload.message);
+      }
       setIsActionBusy(false);
+    };
+
+    const handleArrivalCodeRequested = () => {
+      setIsActionBusy(false);
+      setArrivalCode('');
+      setArrivalCodeError('');
+      setArrivalCodeVisible(true);
     };
 
     driverSocket.on('rideStatusUpdate', handleStatusUpdate);
     driverSocket.on('rideCancelled', handleStatusUpdate);
     driverSocket.on('rideError', handleRideError);
+    driverSocket.on('arrivalCodeRequested', handleArrivalCodeRequested);
 
     return () => {
       trackingActive = false;
@@ -503,6 +520,7 @@ export default function DriverActiveRideScreen() {
       driverSocket.off('rideStatusUpdate', handleStatusUpdate);
       driverSocket.off('rideCancelled', handleStatusUpdate);
       driverSocket.off('rideError', handleRideError);
+      driverSocket.off('arrivalCodeRequested', handleArrivalCodeRequested);
     };
   }, [animatedDrCoords, driver?.id, driver?.vehicle?.category, dropoff, headingAnim, pickup, rideId, router, stage]);
 
@@ -515,6 +533,32 @@ export default function DriverActiveRideScreen() {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setActionStatus(optimistic);
     setTimeout(() => setIsActionBusy(false), 400);
+  };
+
+  const requestArrivalCode = () => {
+    if (!driver?.id || !rideId || isActionBusy) return;
+
+    setIsActionBusy(true);
+    setArrivalCodeError('');
+    driverSocket.emit('driver_arrived', { rideId, driverId: driver.id });
+  };
+
+  const submitArrivalCode = () => {
+    if (!driver?.id || !rideId || isActionBusy) return;
+
+    const normalizedCode = arrivalCode.replace(/\D/g, '').slice(0, 6);
+    if (normalizedCode.length !== 6) {
+      setArrivalCodeError('Enter the 6-digit passenger code.');
+      return;
+    }
+
+    setIsActionBusy(true);
+    setArrivalCodeError('');
+    driverSocket.emit('confirm_arrival_code', {
+      rideId,
+      driverId: driver.id,
+      code: normalizedCode,
+    });
   };
 
   const handleToggleRotation = () => {
@@ -545,7 +589,7 @@ export default function DriverActiveRideScreen() {
       label: 'I HAVE ARRIVED',
       color: TEAL,
       icon: 'navigate',
-      onPress: () => transitionRide('driver_arrived', 'ARRIVED'),
+      onPress: requestArrivalCode,
     };
   } else if (actionStatus === 'ARRIVED') {
     actionButton = {
@@ -688,6 +732,51 @@ export default function DriverActiveRideScreen() {
           </>
         )}
       </View>
+
+      <Modal
+        visible={arrivalCodeVisible}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => {
+          if (!isActionBusy) setArrivalCodeVisible(false);
+        }}>
+        <View style={styles.codeBackdrop}>
+          <View style={styles.codeCard}>
+            <View style={styles.codeIcon}>
+              <Ionicons name="shield-checkmark" size={30} color={TEAL} />
+            </View>
+            <Text style={styles.codeTitle}>Confirm Passenger</Text>
+            <Text style={styles.codeSubtitle}>Ask the passenger for their 6-digit code before starting the trip.</Text>
+
+            <TextInput
+              value={arrivalCode}
+              onChangeText={(value) => {
+                setArrivalCode(value.replace(/\D/g, '').slice(0, 6));
+                setArrivalCodeError('');
+              }}
+              keyboardType="number-pad"
+              maxLength={6}
+              placeholder="000000"
+              placeholderTextColor="#9DB0AE"
+              style={styles.codeInput}
+            />
+
+            {!!arrivalCodeError && <Text style={styles.codeError}>{arrivalCodeError}</Text>}
+
+            <Pressable
+              style={[styles.codeButton, isActionBusy && styles.codeButtonDisabled]}
+              onPress={submitArrivalCode}
+              disabled={isActionBusy}>
+              {isActionBusy ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.codeButtonText}>Confirm Arrival</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -827,4 +916,55 @@ const styles = StyleSheet.create({
   primaryActionText: { color: '#FFFFFF', fontSize: 20, fontWeight: '900', letterSpacing: 0.6 },
   loadingRow: { alignItems: 'center', paddingVertical: 20, gap: 12 },
   loadingText: { fontSize: 14, fontWeight: '700', color: '#5C7A78' },
+  codeBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(6, 22, 21, 0.46)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  codeCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 22,
+    alignItems: 'center',
+  },
+  codeIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: '#E7F5F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  codeTitle: { fontSize: 22, fontWeight: '900', color: '#102A28', marginBottom: 8 },
+  codeSubtitle: { fontSize: 14, fontWeight: '700', color: '#617C79', textAlign: 'center', lineHeight: 20, marginBottom: 18 },
+  codeInput: {
+    width: '100%',
+    height: 58,
+    borderRadius: 16,
+    backgroundColor: '#F7FBFA',
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    textAlign: 'center',
+    fontSize: 26,
+    fontWeight: '900',
+    letterSpacing: 8,
+    color: '#102A28',
+  },
+  codeError: { color: '#C0392B', fontSize: 13, fontWeight: '800', marginTop: 10, textAlign: 'center' },
+  codeButton: {
+    width: '100%',
+    height: 54,
+    borderRadius: 16,
+    backgroundColor: TEAL,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 18,
+  },
+  codeButtonDisabled: { opacity: 0.72 },
+  codeButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '900' },
 });
