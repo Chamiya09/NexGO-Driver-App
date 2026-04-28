@@ -37,6 +37,19 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 const TEAL = '#008080';
 const DEEP_BLUE = '#114B7A';
+const NAVIGATION_ANIMATION_MS = 950;
+const NAVIGATION_ZOOM = 18;
+const NAVIGATION_PITCH = 58;
+
+function normalizeHeadingDelta(delta: number) {
+  if (delta > 180) return delta - 360;
+  if (delta < -180) return delta + 360;
+  return delta;
+}
+
+function smoothHeading(previous: number, next: number, factor = 0.35) {
+  return previous + normalizeHeadingDelta(next - previous) * factor;
+}
 
 type RideActionStatus = 'ACCEPTED' | 'ARRIVED' | 'IN_TRANSIT';
 
@@ -98,6 +111,8 @@ export default function DriverActiveRideScreen() {
   const router = useRouter();
   const mapRef = useRef<MapView>(null);
   const lastPositionRef = useRef<LatLng | null>(null);
+  const cameraHeadingRef = useRef(0);
+  const isRotationEnabledRef = useRef(true);
   const params = useLocalSearchParams<RideParams>();
   const { driver } = useDriverAuth();
 
@@ -144,7 +159,7 @@ export default function DriverActiveRideScreen() {
   const [durationLabel, setDurationLabel] = useState('—');
   const [isLoadingRoute, setIsLoadingRoute] = useState(true);
   const [isActionBusy, setIsActionBusy] = useState(false);
-  const [cameraHeading, setCameraHeading] = useState(0);
+  const [isRotationEnabled, setIsRotationEnabled] = useState(true);
 
   const stage: DriverRideStage = actionStatus === 'ACCEPTED' ? 'TO_PICKUP' : 'IN_TRANSIT';
   const origin = stage === 'TO_PICKUP' ? driverPosition : pickup;
@@ -154,6 +169,10 @@ export default function DriverActiveRideScreen() {
   useEffect(() => {
     setRemainingRoute(sliceRemainingPolyline(routeCoordinates, driverPosition));
   }, [driverPosition, routeCoordinates]);
+
+  useEffect(() => {
+    isRotationEnabledRef.current = isRotationEnabled;
+  }, [isRotationEnabled]);
 
   useEffect(() => {
     let active = true;
@@ -206,17 +225,22 @@ export default function DriverActiveRideScreen() {
             longitude: location.coords.longitude,
           };
 
-          const heading = safeBearing(lastPositionRef.current, next, cameraHeading);
+          const reportedHeading =
+            typeof location.coords.heading === 'number' && location.coords.heading >= 0
+              ? location.coords.heading
+              : null;
+          const targetHeading = reportedHeading ?? safeBearing(lastPositionRef.current, next, cameraHeadingRef.current);
+          const heading = smoothHeading(cameraHeadingRef.current, targetHeading);
           lastPositionRef.current = next;
+          cameraHeadingRef.current = heading;
 
           setDriverPosition(next);
-          setCameraHeading(heading);
 
           animatedDrCoords.timing({
             latitude: next.latitude,
             longitude: next.longitude,
             useNativeDriver: false,
-            duration: 1000
+            duration: NAVIGATION_ANIMATION_MS
           } as Parameters<typeof animatedDrCoords.timing>[0]).start();
 
           let currentH = (headingAnim as any)._value || 0;
@@ -226,19 +250,20 @@ export default function DriverActiveRideScreen() {
 
           Animated.timing(headingAnim, {
             toValue: currentH + diff,
-            duration: 1000,
+            duration: NAVIGATION_ANIMATION_MS,
             useNativeDriver: true,
           }).start();
 
+          const rotateCamera = isRotationEnabledRef.current;
           mapRef.current?.animateCamera(
             {
               center: next,
-              heading,
-              pitch: 58,
-              zoom: 18,
+              heading: rotateCamera ? heading : 0,
+              pitch: rotateCamera ? NAVIGATION_PITCH : 0,
+              zoom: NAVIGATION_ZOOM,
               altitude: 380,
             },
-            { duration: 900 }
+            { duration: NAVIGATION_ANIMATION_MS }
           );
 
           if (driver?.id && rideId) {
@@ -289,7 +314,7 @@ export default function DriverActiveRideScreen() {
       driverSocket.off('rideCancelled', handleStatusUpdate);
       driverSocket.off('rideError', handleRideError);
     };
-  }, [animatedDrCoords, cameraHeading, driver?.id, headingAnim, rideId, router]);
+  }, [animatedDrCoords, driver?.id, headingAnim, rideId, router]);
 
   const onDirectionsReady = (result: DirectionsResult) => {
     const coordinates = result.coordinates;
@@ -310,6 +335,22 @@ export default function DriverActiveRideScreen() {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setActionStatus(optimistic);
     setTimeout(() => setIsActionBusy(false), 400);
+  };
+
+  const handleToggleRotation = () => {
+    const nextRotationEnabled = !isRotationEnabled;
+    setIsRotationEnabled(nextRotationEnabled);
+
+    mapRef.current?.animateCamera(
+      {
+        center: driverPosition,
+        heading: nextRotationEnabled ? cameraHeadingRef.current : 0,
+        pitch: nextRotationEnabled ? NAVIGATION_PITCH : 0,
+        zoom: NAVIGATION_ZOOM,
+        altitude: 380,
+      },
+      { duration: 450 }
+    );
   };
 
   let actionButton: {
@@ -431,6 +472,17 @@ export default function DriverActiveRideScreen() {
         </View>
       </SafeAreaView>
 
+      <Pressable
+        style={[styles.rotationButton, isRotationEnabled ? styles.rotationButtonActive : styles.rotationButtonInactive]}
+        onPress={handleToggleRotation}
+        accessibilityRole="button"
+        accessibilityLabel={isRotationEnabled ? 'Disable map rotation' : 'Enable map rotation'}>
+        <Ionicons name={isRotationEnabled ? 'navigate-circle' : 'navigate-circle-outline'} size={23} color={isRotationEnabled ? '#FFFFFF' : TEAL} />
+        <Text style={[styles.rotationButtonText, isRotationEnabled ? styles.rotationButtonTextActive : styles.rotationButtonTextInactive]}>
+          {isRotationEnabled ? 'Rotate' : 'North'}
+        </Text>
+      </Pressable>
+
       <View style={styles.sheet}>
         <View style={styles.sheetHandle} />
 
@@ -492,6 +544,43 @@ const styles = StyleSheet.create({
   hudLabel: { color: '#A8D3D0', fontSize: 12, fontWeight: '700', letterSpacing: 0.8 },
   hudPrimary: { color: '#FFFFFF', fontSize: 35, fontWeight: '900', lineHeight: 40 },
   hudSecondary: { color: '#D9F0EE', fontSize: 17, fontWeight: '700' },
+  rotationButton: {
+    position: 'absolute',
+    right: 18,
+    bottom: 170,
+    minHeight: 46,
+    borderRadius: 23,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    shadowColor: '#001F1E',
+    shadowOpacity: 0.16,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 12,
+    elevation: 8,
+    zIndex: 35,
+  },
+  rotationButtonActive: {
+    backgroundColor: TEAL,
+    borderColor: TEAL,
+  },
+  rotationButtonInactive: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D9E9E6',
+  },
+  rotationButtonText: {
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  rotationButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  rotationButtonTextInactive: {
+    color: TEAL,
+  },
 
   markerBubble: {
     width: 46,
