@@ -17,7 +17,6 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import MapView, { Marker, Polyline, UrlTile, AnimatedRegion } from 'react-native-maps';
-import MapViewDirections from 'react-native-maps-directions';
 import { Ionicons } from '@expo/vector-icons';
 import driverSocket from '@/lib/driverSocket';
 import { useDriverAuth } from '@/context/driver-auth-context';
@@ -53,10 +52,10 @@ function smoothHeading(previous: number, next: number, factor = 0.35) {
 
 type RideActionStatus = 'ACCEPTED' | 'ARRIVED' | 'IN_TRANSIT';
 
-type DirectionsResult = {
+type RoutePath = {
   coordinates: LatLng[];
-  distance: number;
-  duration: number;
+  distanceMeters: number;
+  durationSeconds: number;
 };
 
 type RideParams = {
@@ -83,7 +82,7 @@ function normalizeStatus(raw: string | undefined): RideActionStatus {
   return 'ACCEPTED';
 }
 
-async function fetchFallbackRoute(origin: LatLng, destination: LatLng) {
+async function fetchFastRoutePath(origin: LatLng, destination: LatLng): Promise<RoutePath> {
   const url =
     `https://router.project-osrm.org/route/v1/driving/` +
     `${origin.longitude},${origin.latitude};${destination.longitude},${destination.latitude}` +
@@ -107,12 +106,21 @@ async function fetchFallbackRoute(origin: LatLng, destination: LatLng) {
   };
 }
 
+function createDirectRoute(origin: LatLng, destination: LatLng): LatLng[] {
+  if (!origin.latitude || !origin.longitude || !destination.latitude || !destination.longitude) {
+    return [];
+  }
+
+  return [origin, destination];
+}
+
 export default function DriverActiveRideScreen() {
   const router = useRouter();
   const mapRef = useRef<MapView>(null);
   const lastPositionRef = useRef<LatLng | null>(null);
   const cameraHeadingRef = useRef(0);
   const isRotationEnabledRef = useRef(true);
+  const didRefreshNavigationFromGpsRef = useRef(false);
   const params = useLocalSearchParams<RideParams>();
   const { driver } = useDriverAuth();
 
@@ -139,8 +147,8 @@ export default function DriverActiveRideScreen() {
     }),
     [params.drLat, params.drLng, params.pLat, params.pLng]
   );
+  const driverPositionRef = useRef<LatLng>(initialDriverPosition);
 
-  const [isRouteFetched, setIsRouteFetched] = useState(false);
   const [driverPosition, setDriverPosition] = useState<LatLng>(initialDriverPosition);
 
   const animatedDrCoords = useRef(new AnimatedRegion({
@@ -153,7 +161,8 @@ export default function DriverActiveRideScreen() {
   const headingAnim = useRef(new Animated.Value(0)).current;
 
   const [actionStatus, setActionStatus] = useState<RideActionStatus>(normalizeStatus(params.status));
-  const [routeCoordinates, setRouteCoordinates] = useState<LatLng[]>([]);
+  const [navigationRoute, setNavigationRoute] = useState<LatLng[]>(() => createDirectRoute(initialDriverPosition, pickup));
+  const [tripRoute, setTripRoute] = useState<LatLng[]>(() => createDirectRoute(pickup, dropoff));
   const [remainingRoute, setRemainingRoute] = useState<LatLng[]>([]);
   const [distanceLabel, setDistanceLabel] = useState('—');
   const [durationLabel, setDurationLabel] = useState('—');
@@ -162,13 +171,12 @@ export default function DriverActiveRideScreen() {
   const [isRotationEnabled, setIsRotationEnabled] = useState(true);
 
   const stage: DriverRideStage = actionStatus === 'ACCEPTED' ? 'TO_PICKUP' : 'IN_TRANSIT';
-  const origin = stage === 'TO_PICKUP' ? driverPosition : pickup;
-  const destination = stage === 'TO_PICKUP' ? pickup : dropoff;
-  const googleApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 
   useEffect(() => {
-    setRemainingRoute(sliceRemainingPolyline(routeCoordinates, driverPosition));
-  }, [driverPosition, routeCoordinates]);
+    const nextRemainingRoute =
+      stage === 'TO_PICKUP' ? sliceRemainingPolyline(navigationRoute, driverPosition) : sliceRemainingPolyline(tripRoute, driverPosition);
+    setRemainingRoute(nextRemainingRoute);
+  }, [driverPosition, navigationRoute, stage, tripRoute]);
 
   useEffect(() => {
     isRotationEnabledRef.current = isRotationEnabled;
@@ -177,37 +185,68 @@ export default function DriverActiveRideScreen() {
   useEffect(() => {
     let active = true;
 
-    const hydrateFallback = async () => {
-      if (googleApiKey) return;
+    const hydrateFastRoutes = async () => {
+      setIsLoadingRoute(true);
+
+      const routeOrigin = driverPositionRef.current;
+      const directNavigationRoute = createDirectRoute(routeOrigin, pickup);
+      const directTripRoute = createDirectRoute(pickup, dropoff);
+      setNavigationRoute(directNavigationRoute);
+      setTripRoute(directTripRoute);
+      setRemainingRoute(stage === 'TO_PICKUP' ? sliceRemainingPolyline(directNavigationRoute, routeOrigin) : directTripRoute);
+      setIsLoadingRoute(false);
 
       try {
-        setIsLoadingRoute(true);
-        const fallback = await fetchFallbackRoute(origin, destination);
+        const [navigationResult, tripResult] = await Promise.allSettled([
+          fetchFastRoutePath(routeOrigin, pickup),
+          fetchFastRoutePath(pickup, dropoff),
+        ]);
+
         if (!active) return;
 
-        setRouteCoordinates(fallback.coordinates);
-        setRemainingRoute(sliceRemainingPolyline(fallback.coordinates, driverPosition));
-        setDistanceLabel(formatDistance(fallback.distanceMeters));
-        setDurationLabel(formatDuration(fallback.durationSeconds));
-        setIsRouteFetched(true);
+        let nextNavigationRoute = directNavigationRoute;
+        let nextTripRoute = directTripRoute;
+        let activeRouteResult: RoutePath | null = null;
+
+        if (navigationResult.status === 'fulfilled') {
+          nextNavigationRoute = navigationResult.value.coordinates;
+          setNavigationRoute(nextNavigationRoute);
+          if (stage === 'TO_PICKUP') activeRouteResult = navigationResult.value;
+        }
+
+        if (tripResult.status === 'fulfilled') {
+          nextTripRoute = tripResult.value.coordinates;
+          setTripRoute(nextTripRoute);
+          if (stage === 'IN_TRANSIT') activeRouteResult = tripResult.value;
+        }
+
+        setRemainingRoute(
+          stage === 'TO_PICKUP'
+            ? sliceRemainingPolyline(nextNavigationRoute, routeOrigin)
+            : sliceRemainingPolyline(nextTripRoute, routeOrigin)
+        );
+
+        if (activeRouteResult) {
+          setDistanceLabel(formatDistance(activeRouteResult.distanceMeters));
+          setDurationLabel(formatDuration(activeRouteResult.durationSeconds));
+        }
       } catch (error) {
-        console.error('[ActiveRide] fallback route failed:', error);
+        console.error('[ActiveRide] fast route failed:', error);
       } finally {
         if (active) setIsLoadingRoute(false);
       }
     };
 
-    if (!isRouteFetched) {
-      hydrateFallback();
-    }
+    hydrateFastRoutes();
 
     return () => {
       active = false;
     };
-  }, [googleApiKey, origin, destination, driverPosition, isRouteFetched]);
+  }, [dropoff, pickup, stage]);
 
   useEffect(() => {
     let locationSub: Location.LocationSubscription | null = null;
+    let trackingActive = true;
 
     const beginTracking = async () => {
       const permission = await Location.requestForegroundPermissionsAsync();
@@ -224,6 +263,26 @@ export default function DriverActiveRideScreen() {
             latitude: location.coords.latitude,
             longitude: location.coords.longitude,
           };
+          driverPositionRef.current = next;
+
+          if (!didRefreshNavigationFromGpsRef.current && stage === 'TO_PICKUP') {
+            didRefreshNavigationFromGpsRef.current = true;
+            const directNavigationRoute = createDirectRoute(next, pickup);
+            setNavigationRoute(directNavigationRoute);
+            setRemainingRoute(sliceRemainingPolyline(directNavigationRoute, next));
+
+            fetchFastRoutePath(next, pickup)
+              .then((route) => {
+                if (!trackingActive) return;
+                setNavigationRoute(route.coordinates);
+                setRemainingRoute(sliceRemainingPolyline(route.coordinates, next));
+                setDistanceLabel(formatDistance(route.distanceMeters));
+                setDurationLabel(formatDuration(route.durationSeconds));
+              })
+              .catch((error) => {
+                console.error('[ActiveRide] live navigation route failed:', error);
+              });
+          }
 
           const reportedHeading =
             typeof location.coords.heading === 'number' && location.coords.heading >= 0
@@ -309,22 +368,13 @@ export default function DriverActiveRideScreen() {
     driverSocket.on('rideError', handleRideError);
 
     return () => {
+      trackingActive = false;
       locationSub?.remove();
       driverSocket.off('rideStatusUpdate', handleStatusUpdate);
       driverSocket.off('rideCancelled', handleStatusUpdate);
       driverSocket.off('rideError', handleRideError);
     };
-  }, [animatedDrCoords, driver?.id, headingAnim, rideId, router]);
-
-  const onDirectionsReady = (result: DirectionsResult) => {
-    const coordinates = result.coordinates;
-    setRouteCoordinates(coordinates);
-    setRemainingRoute(sliceRemainingPolyline(coordinates, driverPosition));
-    setDistanceLabel(formatDistance(result.distance * 1000));
-    setDurationLabel(formatDuration(result.duration * 60));
-    setIsLoadingRoute(false);
-    setIsRouteFetched(true);
-  };
+  }, [animatedDrCoords, driver?.id, headingAnim, pickup, rideId, router, stage]);
 
   const transitionRide = (eventName: 'driver_arrived' | 'start_trip' | 'complete_trip', optimistic: RideActionStatus) => {
     if (!driver?.id || !rideId || isActionBusy) return;
@@ -393,8 +443,8 @@ export default function DriverActiveRideScreen() {
         style={StyleSheet.absoluteFill}
         mapType="none"
         initialRegion={{
-          latitude: origin.latitude || 6.9271,
-          longitude: origin.longitude || 79.8612,
+          latitude: initialDriverPosition.latitude || 6.9271,
+          longitude: initialDriverPosition.longitude || 79.8612,
           latitudeDelta: 0.06,
           longitudeDelta: 0.06,
         }}>
@@ -404,25 +454,8 @@ export default function DriverActiveRideScreen() {
           flipY={false}
         />
 
-        {!isRouteFetched && !!googleApiKey && (
-          <MapViewDirections
-            origin={origin}
-            destination={destination}
-            apikey={googleApiKey}
-            strokeWidth={0}
-            mode="DRIVING"
-            optimizeWaypoints
-            onReady={onDirectionsReady}
-            onError={async () => {
-              const fallback = await fetchFallbackRoute(origin, destination);
-              setRouteCoordinates(fallback.coordinates);
-              setRemainingRoute(sliceRemainingPolyline(fallback.coordinates, driverPosition));
-              setDistanceLabel(formatDistance(fallback.distanceMeters));
-              setDurationLabel(formatDuration(fallback.durationSeconds));
-              setIsLoadingRoute(false);
-              setIsRouteFetched(true);
-            }}
-          />
+        {stage === 'TO_PICKUP' && tripRoute.length > 1 && (
+          <Polyline coordinates={tripRoute} strokeWidth={5} strokeColor="rgba(17, 75, 122, 0.38)" lineCap="round" />
         )}
 
         {remainingRoute.length > 1 && (
