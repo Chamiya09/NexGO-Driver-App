@@ -34,6 +34,10 @@ const teal = '#008080';
 type PassengerPin = {
   rideId: string;
   passengerName: string;
+  vehicleType: string;
+  price: number;
+  pickup: RideNotificationData['pickup'];
+  dropoff: RideNotificationData['dropoff'];
   latitude: number;
   longitude: number;
 };
@@ -136,6 +140,10 @@ export default function DriverHomeScreen() {
           {
             rideId: rideData.rideId,
             passengerName: rideData.passengerName,
+            vehicleType: rideData.vehicleType,
+            price: rideData.price,
+            pickup: rideData.pickup,
+            dropoff: rideData.dropoff,
             latitude: rideData.pickup.latitude,
             longitude: rideData.pickup.longitude,
           },
@@ -262,6 +270,14 @@ export default function DriverHomeScreen() {
                   params: {
                     id: pin.rideId,
                     passengerName: pin.passengerName,
+                    vehicleType: pin.vehicleType,
+                    price: String(pin.price),
+                    pLat: String(pin.pickup.latitude),
+                    pLng: String(pin.pickup.longitude),
+                    pName: pin.pickup.name ?? '',
+                    dLat: String(pin.dropoff.latitude),
+                    dLng: String(pin.dropoff.longitude),
+                    dName: pin.dropoff.name ?? '',
                     ...(driverCoords && { drLat: String(driverCoords.latitude), drLng: String(driverCoords.longitude) })
                   },
                 })
