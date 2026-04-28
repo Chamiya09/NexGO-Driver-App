@@ -478,7 +478,13 @@ export default function DriverActiveRideScreen() {
       if (payload.rideId !== rideId) return;
 
       const canonical = (payload.canonicalStatus ?? payload.status ?? '').toUpperCase();
-      if (canonical === 'ARRIVED') setActionStatus('ARRIVED');
+      if (canonical === 'ARRIVED') {
+        setActionStatus('ARRIVED');
+        setIsActionBusy(false);
+        setArrivalCodeVisible(false);
+        setArrivalCode('');
+        setArrivalCodeError('');
+      }
       if (canonical === 'IN_TRANSIT' || canonical === 'INPROGRESS') setActionStatus('IN_TRANSIT');
       if (canonical === 'COMPLETED') {
         Alert.alert('Trip completed', 'Ride completed successfully.', [
