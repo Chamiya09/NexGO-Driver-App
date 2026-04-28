@@ -36,8 +36,8 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 const TEAL = '#008080';
 const DEEP_BLUE = '#114B7A';
-const NAVIGATION_ANIMATION_MS = 260;
-const HEADING_ANIMATION_MS = 80;
+const NAVIGATION_ANIMATION_MS = 420;
+const HEADING_ANIMATION_MS = 220;
 const NAVIGATION_ZOOM = 18;
 const NAVIGATION_PITCH = 58;
 const ROUTE_REFRESH_DISTANCE_METERS = 35;
@@ -48,7 +48,7 @@ function normalizeHeadingDelta(delta: number) {
   return delta;
 }
 
-function smoothHeading(previous: number, next: number, factor = 0.82) {
+function smoothHeading(previous: number, next: number, factor = 0.38) {
   return previous + normalizeHeadingDelta(next - previous) * factor;
 }
 
