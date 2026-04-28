@@ -53,8 +53,13 @@ export default function DriverHomeScreen() {
   const [socketOk, setSocketOk] = useState(driverSocket.connected);
   const [passengerPins, setPassengerPins] = useState<PassengerPin[]>([]);
   const isOnlineRef = useRef(false);
+  const driverCoordsRef = useRef<{ latitude: number; longitude: number } | null>(null);
 
   const [driverCoords, setDriverCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  useEffect(() => {
+    driverCoordsRef.current = driverCoords;
+  }, [driverCoords]);
 
   // ── Setup Location ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -85,7 +90,22 @@ export default function DriverHomeScreen() {
 
   // ── Socket connection status ─────────────────────────────────────────────
   useEffect(() => {
-    const onConnect = () => setSocketOk(true);
+    const emitCurrentDriverLocation = () => {
+      const coords = driverCoordsRef.current;
+      if (!driver?.id || !coords) return;
+
+      driverSocket.emit('updateDriverLocation', {
+        driverId: driver.id,
+        ...coords,
+        vehicleCategory: driver.vehicle?.category,
+        isOnline: isOnlineRef.current,
+      });
+    };
+
+    const onConnect = () => {
+      setSocketOk(true);
+      emitCurrentDriverLocation();
+    };
     const onDisconnect = () => setSocketOk(false);
     driverSocket.on('connect', onConnect);
     driverSocket.on('disconnect', onDisconnect);
@@ -93,7 +113,7 @@ export default function DriverHomeScreen() {
       driverSocket.off('connect', onConnect);
       driverSocket.off('disconnect', onDisconnect);
     };
-  }, []);
+  }, [driver?.id, driver?.vehicle?.category]);
 
   // ── Location broadcast every 10 s ────────────────────────────────────────
   useEffect(() => {
