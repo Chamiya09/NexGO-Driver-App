@@ -13,6 +13,7 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useDriverAuth } from '@/context/driver-auth-context';
+import { useNotifications } from '@/context/notifications-context';
 import driverSocket from '@/lib/driverSocket';
 import { MAP_TILE_URL_TEMPLATE } from '@/lib/mapTiles';
 
@@ -48,6 +49,7 @@ async function fetchOsrmRoute(from: LatLng, to: LatLng) {
 export default function RidePreviewScreen() {
   const router = useRouter();
   const { driver } = useDriverAuth();
+  const { removeNotification } = useNotifications();
   const mapRef = useRef<MapView>(null);
 
   const params = useLocalSearchParams<{
@@ -98,6 +100,20 @@ export default function RidePreviewScreen() {
   const [tripRoute, setTripRoute]         = useState<RouteState>(null);
   const [loadingRoute, setLoadingRoute]   = useState(true);
   const [accepting, setAccepting]         = useState(false);
+
+  useEffect(() => {
+    const handleRemoveRideRequest = ({ rideId: removedRideId }: { rideId: string }) => {
+      if (removedRideId !== rideId) return;
+
+      removeNotification(rideId);
+      router.back();
+    };
+
+    driverSocket.on('remove_ride_request', handleRemoveRideRequest);
+    return () => {
+      driverSocket.off('remove_ride_request', handleRemoveRideRequest);
+    };
+  }, [removeNotification, rideId, router]);
 
   // ── Fetch both routes on mount ────────────────────────────────────────────
   useEffect(() => {
