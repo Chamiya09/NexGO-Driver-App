@@ -203,6 +203,7 @@ export default function DriverActiveRideScreen() {
   const [mapReady, setMapReady] = useState(false);
   const [arrivalCodeVisible, setArrivalCodeVisible] = useState(false);
   const [arrivalCode, setArrivalCode] = useState('');
+  const [requestedArrivalCode, setRequestedArrivalCode] = useState('');
   const [arrivalCodeError, setArrivalCodeError] = useState('');
   const navigationRouteOriginRef = useRef<LatLng>(initialDriverPosition);
   const hasNavigationOsrmRouteRef = useRef(false);
@@ -532,6 +533,7 @@ export default function DriverActiveRideScreen() {
         setIsActionBusy(false);
         setArrivalCodeVisible(false);
         setArrivalCode('');
+        setRequestedArrivalCode('');
         setArrivalCodeError('');
       }
       if (canonical === 'IN_TRANSIT' || canonical === 'INPROGRESS') setActionStatus('IN_TRANSIT');
@@ -558,9 +560,12 @@ export default function DriverActiveRideScreen() {
       setIsActionBusy(false);
     };
 
-    const handleArrivalCodeRequested = () => {
+    const handleArrivalCodeRequested = (payload?: { rideId?: string; code?: string }) => {
+      if (payload?.rideId && payload.rideId !== rideId) return;
+
       setIsActionBusy(false);
       setArrivalCode('');
+      setRequestedArrivalCode(payload?.code ?? '');
       setArrivalCodeError('');
       setArrivalCodeVisible(true);
     };
@@ -597,6 +602,7 @@ export default function DriverActiveRideScreen() {
 
     setIsActionBusy(true);
     setArrivalCodeError('');
+    setRequestedArrivalCode('');
     driverSocket.emit('driver_arrived', { rideId, driverId: driver.id });
   };
 
@@ -806,6 +812,13 @@ export default function DriverActiveRideScreen() {
             <Text style={styles.codeTitle}>Confirm Passenger</Text>
             <Text style={styles.codeSubtitle}>Ask the passenger for their 6-digit code before starting the trip.</Text>
 
+            {!!requestedArrivalCode && (
+              <View style={styles.generatedCodeBox}>
+                <Text style={styles.generatedCodeLabel}>Passenger code</Text>
+                <Text style={styles.generatedCodeValue}>{requestedArrivalCode}</Text>
+              </View>
+            )}
+
             <TextInput
               value={arrivalCode}
               onChangeText={(value) => {
@@ -830,6 +843,14 @@ export default function DriverActiveRideScreen() {
               ) : (
                 <Text style={styles.codeButtonText}>Confirm Arrival</Text>
               )}
+            </Pressable>
+
+            <Pressable
+              style={[styles.resendCodeButton, isActionBusy && styles.codeButtonDisabled]}
+              onPress={requestArrivalCode}
+              disabled={isActionBusy}>
+              <Ionicons name="refresh" size={17} color={TEAL} />
+              <Text style={styles.resendCodeText}>Resend another code</Text>
             </Pressable>
           </View>
         </View>
@@ -1012,6 +1033,28 @@ const styles = StyleSheet.create({
     letterSpacing: 8,
     color: '#102A28',
   },
+  generatedCodeBox: {
+    width: '100%',
+    borderRadius: 16,
+    backgroundColor: '#F7FBFA',
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginBottom: 14,
+  },
+  generatedCodeLabel: {
+    color: '#617C79',
+    fontSize: 12,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  generatedCodeValue: {
+    color: '#102A28',
+    fontSize: 30,
+    fontWeight: '900',
+    letterSpacing: 8,
+  },
   codeError: { color: '#C0392B', fontSize: 13, fontWeight: '800', marginTop: 10, textAlign: 'center' },
   codeButton: {
     width: '100%',
@@ -1024,4 +1067,18 @@ const styles = StyleSheet.create({
   },
   codeButtonDisabled: { opacity: 0.72 },
   codeButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '900' },
+  resendCodeButton: {
+    minHeight: 44,
+    marginTop: 10,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  resendCodeText: {
+    color: TEAL,
+    fontSize: 14,
+    fontWeight: '900',
+  },
 });
