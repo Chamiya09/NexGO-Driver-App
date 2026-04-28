@@ -38,6 +38,13 @@ type PassengerPin = {
   longitude: number;
 };
 
+const normalizeVehicleCategory = (category?: string | null) => {
+  const value = String(category ?? '').trim();
+  if (value === 'TukTuk') return 'Tuk';
+  if (value === 'Sedan') return 'Car';
+  return value;
+};
+
 export default function DriverHomeScreen() {
   const { driver } = useDriverAuth();
   const router = useRouter();
@@ -95,16 +102,31 @@ export default function DriverHomeScreen() {
   useEffect(() => {
     if (!driver?.id || !driverCoords) return;
     const emit = () =>
-      driverSocket.emit('updateDriverLocation', { driverId: driver.id, ...driverCoords, isOnline: isOnlineRef.current });
+      driverSocket.emit('updateDriverLocation', {
+        driverId: driver.id,
+        ...driverCoords,
+        vehicleCategory: driver.vehicle?.category,
+        isOnline: isOnlineRef.current,
+      });
     emit();
     const id = setInterval(emit, 10_000);
     return () => clearInterval(id);
-  }, [driver?.id, driverCoords, isOnline]);
+  }, [driver?.id, driver?.vehicle?.category, driverCoords, isOnline]);
 
   // ── Incoming ride listener ────────────────────────────────────────────────
   useEffect(() => {
     const onIncomingRide = (rideData: RideNotificationData) => {
       console.log('[Driver] incomingRide received:', rideData);
+
+      const driverCategory = normalizeVehicleCategory(driver?.vehicle?.category);
+      const requestedCategory = normalizeVehicleCategory(rideData.vehicleType);
+
+      if (!driverCategory || driverCategory !== requestedCategory) {
+        console.log(
+          `[Driver] Ride ignored - requested ${requestedCategory || 'unknown'} but driver vehicle is ${driverCategory || 'not added'}`
+        );
+        return;
+      }
 
       const computedDistance = driverCoords ? haversineKm(
         driverCoords.latitude, driverCoords.longitude,
@@ -147,7 +169,7 @@ export default function DriverHomeScreen() {
 
     driverSocket.on('incomingRide', onIncomingRide);
     return () => { driverSocket.off('incomingRide', onIncomingRide); };
-  }, [addNotification, driverCoords]);
+  }, [addNotification, driver?.vehicle?.category, driverCoords]);
 
   // ── Remove ride listener (Atomic acceptance wipe) ─────────────────────────
   useEffect(() => {
@@ -170,7 +192,12 @@ export default function DriverHomeScreen() {
     driverSocket.emit('toggle_online_status', { driverId: driver?.id, isOnline: value });
 
     if (driverCoords) {
-      driverSocket.emit('updateDriverLocation', { driverId: driver?.id, ...driverCoords, isOnline: value });
+      driverSocket.emit('updateDriverLocation', {
+        driverId: driver?.id,
+        ...driverCoords,
+        vehicleCategory: driver?.vehicle?.category,
+        isOnline: value,
+      });
     }
   };
 

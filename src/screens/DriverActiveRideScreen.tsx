@@ -331,6 +331,7 @@ export default function DriverActiveRideScreen() {
               latitude: next.latitude,
               longitude: next.longitude,
               heading,
+              vehicleCategory: driver.vehicle?.category,
               isOnline: true,
             });
           }
@@ -374,7 +375,7 @@ export default function DriverActiveRideScreen() {
       driverSocket.off('rideCancelled', handleStatusUpdate);
       driverSocket.off('rideError', handleRideError);
     };
-  }, [animatedDrCoords, driver?.id, headingAnim, pickup, rideId, router, stage]);
+  }, [animatedDrCoords, driver?.id, driver?.vehicle?.category, headingAnim, pickup, rideId, router, stage]);
 
   const transitionRide = (eventName: 'driver_arrived' | 'start_trip' | 'complete_trip', optimistic: RideActionStatus) => {
     if (!driver?.id || !rideId || isActionBusy) return;
