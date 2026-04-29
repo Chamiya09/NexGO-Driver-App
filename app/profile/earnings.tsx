@@ -10,56 +10,136 @@ import {
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 const teal = '#008080';
 
+type EarningsStatus = 'ready' | 'processing' | 'scheduled';
+
+type EarningsCardItem = {
+  id: string;
+  title: string;
+  subtitle: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  value: string;
+  updatedAt: string;
+  status: EarningsStatus;
+};
+
+const statusMeta = {
+  ready: {
+    label: 'READY',
+    color: '#157A62',
+    backgroundColor: '#E9F8EF',
+    icon: 'checkmark-circle-outline' as const,
+  },
+  processing: {
+    label: 'PROCESSING',
+    color: '#9A6B00',
+    backgroundColor: '#FFF7E0',
+    icon: 'time-outline' as const,
+  },
+  scheduled: {
+    label: 'SCHEDULED',
+    color: teal,
+    backgroundColor: '#E7F5F3',
+    icon: 'calendar-outline' as const,
+  },
+};
+
+const earningsCards: EarningsCardItem[] = [
+  {
+    id: 'available',
+    title: 'Available Balance',
+    subtitle: 'Ready to cash out from completed rides',
+    icon: 'wallet-outline',
+    value: 'LKR 24,650',
+    updatedAt: 'Updated today',
+    status: 'ready',
+  },
+  {
+    id: 'pending',
+    title: 'Pending Payout',
+    subtitle: 'Trips completed but waiting for settlement',
+    icon: 'hourglass-outline',
+    value: 'LKR 8,420',
+    updatedAt: 'Includes this week',
+    status: 'processing',
+  },
+  {
+    id: 'next',
+    title: 'Next Settlement',
+    subtitle: 'Scheduled bank transfer window',
+    icon: 'business-outline',
+    value: 'Friday, 6:00 PM',
+    updatedAt: 'Bank transfer',
+    status: 'scheduled',
+  },
+];
+
 const chartBars = [42, 68, 54, 88, 72, 96, 62];
 
 export default function EarningsScreen() {
+  const completedMetrics = 2;
+  const totalMetrics = 3;
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Text style={styles.eyebrow}>EARNINGS</Text>
-          <Text style={styles.title}>Your driver wallet</Text>
-          <Text style={styles.subtitle}>Track completed rides, payouts, and weekly cash flow.</Text>
-        </View>
-
-        <View style={styles.balanceCard}>
-          <View style={styles.balanceTopRow}>
-            <View>
-              <Text style={styles.balanceLabel}>Available balance</Text>
-              <Text style={styles.balanceValue}>LKR 24,650</Text>
-            </View>
-            <View style={styles.walletIcon}>
-              <Ionicons name="wallet-outline" size={24} color="#FFFFFF" />
-            </View>
-          </View>
-
-          <Pressable style={styles.cashOutButton}>
-            <Text style={styles.cashOutText}>Cash Out</Text>
-            <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+        <View style={styles.topBar}>
+          <Pressable style={styles.backButton} onPress={() => router.back()}>
+            <Ionicons name="chevron-back" size={22} color="#102A28" />
           </Pressable>
+          <Text style={styles.topBarTitle}>Earnings</Text>
+          <View style={styles.topBarSpacer} />
         </View>
 
-        <View style={styles.segmentedControl}>
-          <View style={styles.segmentActive}>
-            <Text style={styles.segmentActiveText}>Weekly</Text>
+        <View style={styles.heroCard}>
+          <View style={styles.heroTopRow}>
+            <View style={styles.heroAvatar}>
+              <Ionicons name="wallet-outline" size={26} color={teal} />
+            </View>
+
+            <View style={styles.heroIdentity}>
+              <Text style={styles.heroName}>Manage earnings</Text>
+              <Text style={styles.heroSubline}>
+                {completedMetrics} of {totalMetrics} payout checkpoints ready
+              </Text>
+            </View>
           </View>
-          <View style={styles.segment}>
-            <Text style={styles.segmentText}>Daily</Text>
+
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${(completedMetrics / totalMetrics) * 100}%` }]} />
           </View>
+
+          <View style={styles.heroBadge}>
+            <Ionicons name="trending-up-outline" size={15} color={teal} />
+            <Text style={styles.heroBadgeText}>Manage earnings</Text>
+          </View>
+
+          <Text style={styles.heroHint}>Track your wallet, payout timing, and recent driver performance in one place.</Text>
         </View>
+
+        <Text style={styles.sectionTitle}>EARNING SUMMARY</Text>
+
+        {earningsCards.map((item) => (
+          <EarningsCard key={item.id} item={item} />
+        ))}
+
+        <Text style={styles.sectionTitle}>WEEKLY PERFORMANCE</Text>
 
         <View style={styles.chartCard}>
           <View style={styles.chartHeader}>
             <View>
-              <Text style={styles.cardTitle}>Weekly chart</Text>
-              <Text style={styles.cardSubtitle}>Placeholder view for rides and income trends</Text>
+              <Text style={styles.chartTitle}>Weekly income trend</Text>
+              <Text style={styles.chartSubtitle}>Ride income and online activity snapshot</Text>
             </View>
-            <Text style={styles.chartTotal}>+18%</Text>
+            <View style={styles.growthPill}>
+              <Ionicons name="arrow-up" size={12} color="#157A62" />
+              <Text style={styles.growthPillText}>18%</Text>
+            </View>
           </View>
 
           <View style={styles.chartArea}>
@@ -72,25 +152,66 @@ export default function EarningsScreen() {
           </View>
         </View>
 
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Ionicons name="car-sport-outline" size={19} color={teal} />
-            <Text style={styles.statValue}>58</Text>
-            <Text style={styles.statLabel}>Trips</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Ionicons name="time-outline" size={19} color={teal} />
-            <Text style={styles.statValue}>41h</Text>
-            <Text style={styles.statLabel}>Online</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Ionicons name="star-outline" size={19} color={teal} />
-            <Text style={styles.statValue}>4.9</Text>
-            <Text style={styles.statLabel}>Rating</Text>
-          </View>
+        <Text style={styles.sectionTitle}>PAYOUT GUIDELINES</Text>
+
+        <View style={styles.groupCard}>
+          <GuidelineRow icon="checkmark-done-outline" text="Completed trips are added to your wallet after ride confirmation." />
+          <GuidelineRow icon="card-outline" text="Bank payouts follow the active settlement schedule on your driver account." />
+          <GuidelineRow icon="shield-checkmark-outline" text="Keep documents and account security updated to avoid payout delays." />
         </View>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function EarningsCard({ item }: { item: EarningsCardItem }) {
+  const meta = statusMeta[item.status];
+
+  return (
+    <View style={styles.documentCard}>
+      <View style={styles.documentHeader}>
+        <View style={styles.documentLeft}>
+          <View style={styles.documentIconWrap}>
+            <Ionicons name={item.icon} size={21} color={teal} />
+          </View>
+
+          <View style={styles.documentTextWrap}>
+            <Text style={styles.documentTitle}>{item.title}</Text>
+            <Text style={styles.documentSubtitle}>{item.subtitle}</Text>
+          </View>
+        </View>
+
+        <View style={[styles.statusPill, { backgroundColor: meta.backgroundColor }]}>
+          <Ionicons name={meta.icon} size={13} color={meta.color} />
+          <Text style={[styles.statusText, { color: meta.color }]}>{meta.label}</Text>
+        </View>
+      </View>
+
+      <View style={styles.inlineDivider} />
+
+      <View style={styles.documentFooter}>
+        <View style={styles.updatedWrap}>
+          <Text style={styles.earningValue}>{item.value}</Text>
+          <Text style={styles.updatedText}>{item.updatedAt}</Text>
+        </View>
+
+        <Pressable style={styles.uploadButton}>
+          <Ionicons name="open-outline" size={15} color={teal} />
+          <Text style={styles.uploadButtonText}>View</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function GuidelineRow({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: string }) {
+  return (
+    <View style={styles.guidelineRow}>
+      <View style={styles.guidelineIconWrap}>
+        <Ionicons name={icon} size={17} color={teal} />
+      </View>
+      <Text style={styles.guidelineText}>{text}</Text>
+    </View>
   );
 }
 
@@ -102,153 +223,259 @@ const styles = StyleSheet.create({
   },
   container: {
     paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 34,
+    paddingTop: 12,
+    paddingBottom: 28,
   },
-  header: {
-    marginBottom: 16,
-  },
-  eyebrow: {
-    color: teal,
-    fontSize: 11,
-    fontWeight: '900',
-    marginBottom: 4,
-  },
-  title: {
-    color: '#102A28',
-    fontSize: 24,
-    fontWeight: '900',
-    marginBottom: 5,
-  },
-  subtitle: {
-    color: '#617C79',
-    fontSize: 13,
-    lineHeight: 19,
-    fontWeight: '600',
-  },
-  balanceCard: {
-    borderRadius: 22,
-    backgroundColor: teal,
-    padding: 16,
-    marginBottom: 14,
-    shadowColor: '#005D5D',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    elevation: 5,
-  },
-  balanceTopRow: {
+  topBar: {
+    minHeight: 42,
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 18,
+    marginBottom: 10,
   },
-  balanceLabel: {
-    color: 'rgba(255, 255, 255, 0.82)',
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: 5,
-  },
-  balanceValue: {
-    color: '#FFFFFF',
-    fontSize: 30,
-    fontWeight: '900',
-  },
-  walletIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cashOutButton: {
-    minHeight: 48,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  cashOutText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '900',
-  },
-  segmentedControl: {
-    flexDirection: 'row',
-    borderRadius: 16,
+  backButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#D9E9E6',
-    padding: 4,
-    marginBottom: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  segmentActive: {
+  topBarTitle: {
+    color: '#102A28',
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  topBarSpacer: {
+    width: 38,
+  },
+  heroCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    marginBottom: 12,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  heroAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#E7F5F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroIdentity: {
     flex: 1,
-    minHeight: 38,
+  },
+  heroName: {
+    color: '#102A28',
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  heroSubline: {
+    color: '#617C79',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '500',
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#D9E9E6',
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+    backgroundColor: teal,
+  },
+  heroBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#E7F5F3',
+  },
+  heroBadgeText: {
+    color: teal,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  heroHint: {
+    color: '#617C79',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+  sectionTitle: {
+    color: '#617C79',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    marginBottom: 6,
+    marginTop: 2,
+  },
+  documentCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    marginBottom: 10,
+  },
+  documentHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  documentLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 11,
+  },
+  documentIconWrap: {
+    width: 38,
+    height: 38,
     borderRadius: 12,
     backgroundColor: '#E7F5F3',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  segment: {
+  documentTextWrap: {
     flex: 1,
-    minHeight: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  segmentActiveText: {
-    color: teal,
-    fontSize: 13,
+  documentTitle: {
+    color: '#102A28',
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 3,
+  },
+  documentSubtitle: {
+    color: '#617C79',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '500',
+  },
+  statusPill: {
+    minHeight: 24,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  statusText: {
+    fontSize: 10,
     fontWeight: '900',
   },
-  segmentText: {
+  inlineDivider: {
+    height: 1,
+    backgroundColor: '#D9E9E6',
+    marginVertical: 11,
+  },
+  documentFooter: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  updatedWrap: {
+    flex: 1,
+    gap: 4,
+  },
+  earningValue: {
+    color: '#102A28',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  updatedText: {
     color: '#617C79',
-    fontSize: 13,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  uploadButton: {
+    minHeight: 34,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#E7F5F3',
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  uploadButtonText: {
+    color: teal,
+    fontSize: 12,
     fontWeight: '800',
   },
   chartCard: {
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#D9E9E6',
     backgroundColor: '#FFFFFF',
-    padding: 14,
-    marginBottom: 14,
+    padding: 12,
+    marginBottom: 10,
   },
   chartHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    gap: 12,
-    marginBottom: 16,
+    gap: 10,
+    marginBottom: 11,
   },
-  cardTitle: {
+  chartTitle: {
     color: '#102A28',
-    fontSize: 17,
-    fontWeight: '900',
+    fontSize: 15,
+    fontWeight: '800',
     marginBottom: 3,
   },
-  cardSubtitle: {
+  chartSubtitle: {
     color: '#617C79',
     fontSize: 12,
     lineHeight: 17,
-    fontWeight: '600',
+    fontWeight: '500',
   },
-  chartTotal: {
+  growthPill: {
+    minHeight: 24,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#E9F8EF',
+  },
+  growthPillText: {
     color: '#157A62',
-    fontSize: 13,
+    fontSize: 10,
     fontWeight: '900',
   },
   chartArea: {
-    height: 140,
+    height: 132,
     borderRadius: 14,
     backgroundColor: '#F7FBFA',
     paddingHorizontal: 12,
-    paddingTop: 16,
+    paddingTop: 14,
     paddingBottom: 10,
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -268,30 +495,32 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
   },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  statCard: {
-    flex: 1,
-    borderRadius: 16,
+  groupCard: {
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#D9E9E6',
     backgroundColor: '#FFFFFF',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
+    padding: 12,
+  },
+  guidelineRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingVertical: 8,
+  },
+  guidelineIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#E7F5F3',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  statValue: {
-    color: '#102A28',
-    fontSize: 16,
-    fontWeight: '900',
-    marginTop: 6,
-  },
-  statLabel: {
+  guidelineText: {
+    flex: 1,
     color: '#617C79',
-    fontSize: 11,
-    fontWeight: '700',
-    marginTop: 2,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '500',
   },
 });

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Alert,
   Platform,
@@ -127,14 +127,22 @@ const buildDocumentsFromDriver = (savedDocuments: SavedDriverDocument[] = []) =>
 
 export default function DriverDocumentUploadsScreen() {
   const { driver, updateDocument } = useDriverAuth();
+  const [uploadingDocumentId, setUploadingDocumentId] = useState<DriverDocumentType | null>(null);
   const documents = useMemo(() => buildDocumentsFromDriver(driver?.documents), [driver?.documents]);
 
   const requiredCount = documents.length;
   const completeCount = documents.filter((document) => document.status === 'approved').length;
 
-  const handleUpload = async (documentId: string) => {
+  const submitPickedDocument = async (documentId: DriverDocumentType, pickedDocument: PickedDriverDocument | null) => {
+    if (!pickedDocument) {
+      return;
+    }
+
+    setUploadingDocumentId(documentId);
+
     try {
-      await updateDocument(documentId as 'license' | 'insurance' | 'registration', `mock://${documentId}-${Date.now()}`);
+      const fileUrl = await uploadFileToCloudinary(pickedDocument);
+      await updateDocument(documentId, fileUrl);
       Alert.alert('Document submitted', 'This document has been saved and submitted for review.');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to submit document.';
@@ -273,7 +281,11 @@ function DocumentCard({
             <Text style={styles.rejectionText}>{document.rejectionReason}</Text>
           ) : null}
         </View>
-        <Pressable style={styles.uploadButton} onPress={onUpload}>
+        <Pressable
+          style={[styles.uploadButton, isUploading && styles.uploadButtonDisabled]}
+          onPress={onUpload}
+          disabled={isUploading}
+        >
           <Ionicons name="cloud-upload-outline" size={15} color={teal} />
           <Text style={styles.uploadButtonText}>{isUploading ? 'Uploading' : actionLabel}</Text>
         </Pressable>

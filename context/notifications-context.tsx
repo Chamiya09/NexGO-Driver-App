@@ -7,9 +7,11 @@ import React, {
   createContext,
   useCallback,
   useContext,
-  useRef,
+  useEffect,
   useState,
 } from 'react';
+
+import driverSocket from '@/lib/driverSocket';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export type RideNotification = {
@@ -32,6 +34,7 @@ type NotificationsContextValue = {
   addNotification: (n: Omit<RideNotification, 'receivedAt' | 'read' | 'id'>) => void;
   markAllRead: () => void;
   markRead: (rideId: string) => void;
+  removeNotification: (rideId: string) => void;
   clearAll: () => void;
 };
 
@@ -70,13 +73,29 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     );
   }, []);
 
+  const removeNotification = useCallback((rideId: string) => {
+    setNotifications((prev) => prev.filter((n) => n.rideId !== rideId));
+  }, []);
+
   const clearAll = useCallback(() => setNotifications([]), []);
+
+  useEffect(() => {
+    const handleRemoveRideRequest = ({ rideId }: { rideId?: string }) => {
+      if (!rideId) return;
+      removeNotification(rideId);
+    };
+
+    driverSocket.on('remove_ride_request', handleRemoveRideRequest);
+    return () => {
+      driverSocket.off('remove_ride_request', handleRemoveRideRequest);
+    };
+  }, [removeNotification]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
     <NotificationsContext.Provider
-      value={{ notifications, unreadCount, addNotification, markAllRead, markRead, clearAll }}>
+      value={{ notifications, unreadCount, addNotification, markAllRead, markRead, removeNotification, clearAll }}>
       {children}
     </NotificationsContext.Provider>
   );

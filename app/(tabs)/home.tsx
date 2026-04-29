@@ -16,7 +16,7 @@ import MapView, { Marker, UrlTile } from 'react-native-maps';
 import { useDriverAuth } from '@/context/driver-auth-context';
 import { useNotifications } from '@/context/notifications-context';
 import driverSocket from '@/lib/driverSocket';
-import { MAP_TILE_URL_TEMPLATE, MAP_TILE_USER_AGENT } from '@/lib/mapTiles';
+import { MAP_TILE_URL_TEMPLATE } from '@/lib/mapTiles';
 import {
   NotificationAlert,
   NotificationAlertRef,
@@ -34,6 +34,10 @@ const teal = '#008080';
 type PassengerPin = {
   rideId: string;
   passengerName: string;
+  vehicleType: string;
+  price: number;
+  pickup: RideNotificationData['pickup'];
+  dropoff: RideNotificationData['dropoff'];
   latitude: number;
   longitude: number;
 };
@@ -41,7 +45,7 @@ type PassengerPin = {
 export default function DriverHomeScreen() {
   const { driver } = useDriverAuth();
   const router = useRouter();
-  const { addNotification } = useNotifications();
+  const { addNotification, removeNotification, clearAll } = useNotifications();
   const mapRef = useRef<MapView>(null);
   const alertRef = useRef<NotificationAlertRef>(null);
 
@@ -49,8 +53,22 @@ export default function DriverHomeScreen() {
   const [socketOk, setSocketOk] = useState(driverSocket.connected);
   const [passengerPins, setPassengerPins] = useState<PassengerPin[]>([]);
   const isOnlineRef = useRef(false);
+  const driverCoordsRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const hydratedOnlineRef = useRef(false);
 
   const [driverCoords, setDriverCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  useEffect(() => {
+    driverCoordsRef.current = driverCoords;
+  }, [driverCoords]);
+
+  useEffect(() => {
+    if (hydratedOnlineRef.current || typeof driver?.isOnline !== 'boolean') return;
+
+    hydratedOnlineRef.current = true;
+    isOnlineRef.current = driver.isOnline;
+    setIsOnline(driver.isOnline);
+  }, [driver?.isOnline]);
 
   // ── Setup Location ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -81,7 +99,22 @@ export default function DriverHomeScreen() {
 
   // ── Socket connection status ─────────────────────────────────────────────
   useEffect(() => {
-    const onConnect = () => setSocketOk(true);
+    const emitCurrentDriverLocation = () => {
+      const coords = driverCoordsRef.current;
+      if (!driver?.id || !coords) return;
+
+      driverSocket.emit('updateDriverLocation', {
+        driverId: driver.id,
+        ...coords,
+        vehicleCategory: driver.vehicle?.category,
+        isOnline: isOnlineRef.current,
+      });
+    };
+
+    const onConnect = () => {
+      setSocketOk(true);
+      emitCurrentDriverLocation();
+    };
     const onDisconnect = () => setSocketOk(false);
     driverSocket.on('connect', onConnect);
     driverSocket.on('disconnect', onDisconnect);
@@ -89,22 +122,33 @@ export default function DriverHomeScreen() {
       driverSocket.off('connect', onConnect);
       driverSocket.off('disconnect', onDisconnect);
     };
-  }, []);
+  }, [driver?.id, driver?.vehicle?.category]);
 
   // ── Location broadcast every 10 s ────────────────────────────────────────
   useEffect(() => {
     if (!driver?.id || !driverCoords) return;
     const emit = () =>
-      driverSocket.emit('updateDriverLocation', { driverId: driver.id, ...driverCoords, isOnline: isOnlineRef.current });
+      driverSocket.emit('updateDriverLocation', {
+        driverId: driver.id,
+        ...driverCoords,
+        vehicleCategory: driver.vehicle?.category,
+        isOnline: isOnlineRef.current,
+      });
     emit();
     const id = setInterval(emit, 10_000);
     return () => clearInterval(id);
-  }, [driver?.id, driverCoords, isOnline]);
+  }, [driver?.id, driver?.vehicle?.category, driverCoords, isOnline]);
 
   // ── Incoming ride listener ────────────────────────────────────────────────
   useEffect(() => {
     const onIncomingRide = (rideData: RideNotificationData) => {
       console.log('[Driver] incomingRide received:', rideData);
+
+      if (!isOnlineRef.current) {
+        console.log('[Driver] Incoming ride ignored - driver is Offline');
+        alertRef.current?.dismiss();
+        return;
+      }
 
       const computedDistance = driverCoords ? haversineKm(
         driverCoords.latitude, driverCoords.longitude,
@@ -131,6 +175,10 @@ export default function DriverHomeScreen() {
           {
             rideId: rideData.rideId,
             passengerName: rideData.passengerName,
+            vehicleType: rideData.vehicleType,
+            price: rideData.price,
+            pickup: rideData.pickup,
+            dropoff: rideData.dropoff,
             latitude: rideData.pickup.latitude,
             longitude: rideData.pickup.longitude,
           },
@@ -147,18 +195,20 @@ export default function DriverHomeScreen() {
 
     driverSocket.on('incomingRide', onIncomingRide);
     return () => { driverSocket.off('incomingRide', onIncomingRide); };
-  }, [addNotification, driverCoords]);
+  }, [addNotification, driver?.vehicle?.category, driverCoords]);
 
   // ── Remove ride listener (Atomic acceptance wipe) ─────────────────────────
   useEffect(() => {
     const onRemoveRide = ({ rideId }: { rideId: string }) => {
       setPassengerPins((prev) => prev.filter(p => p.rideId !== rideId));
+      removeNotification(rideId);
+      alertRef.current?.dismiss();
     };
     driverSocket.on('remove_ride_request', onRemoveRide);
     return () => {
       driverSocket.off('remove_ride_request', onRemoveRide);
     };
-  }, []);
+  }, [removeNotification]);
 
   // ── Online toggle ─────────────────────────────────────────────────────────
   const handleToggleOnline = (value: boolean) => {
@@ -166,11 +216,20 @@ export default function DriverHomeScreen() {
     setIsOnline(value);
 
     // Attempt local notifications cleanups while pushing database updates asynchronously
-    if (!value) alertRef.current?.dismiss();
+    if (!value) {
+      alertRef.current?.dismiss();
+      setPassengerPins([]);
+      clearAll();
+    }
     driverSocket.emit('toggle_online_status', { driverId: driver?.id, isOnline: value });
 
     if (driverCoords) {
-      driverSocket.emit('updateDriverLocation', { driverId: driver?.id, ...driverCoords, isOnline: value });
+      driverSocket.emit('updateDriverLocation', {
+        driverId: driver?.id,
+        ...driverCoords,
+        vehicleCategory: driver?.vehicle?.category,
+        isOnline: value,
+      });
     }
   };
 
@@ -229,7 +288,6 @@ export default function DriverHomeScreen() {
             urlTemplate={MAP_TILE_URL_TEMPLATE}
             maximumZ={19}
             flipY={false}
-            userAgent={MAP_TILE_USER_AGENT}
           />
 
           {/* ── Driver position marker ── */}
@@ -251,6 +309,14 @@ export default function DriverHomeScreen() {
                   params: {
                     id: pin.rideId,
                     passengerName: pin.passengerName,
+                    vehicleType: pin.vehicleType,
+                    price: String(pin.price),
+                    pLat: String(pin.pickup.latitude),
+                    pLng: String(pin.pickup.longitude),
+                    pName: pin.pickup.name ?? '',
+                    dLat: String(pin.dropoff.latitude),
+                    dLng: String(pin.dropoff.longitude),
+                    dName: pin.dropoff.name ?? '',
                     ...(driverCoords && { drLat: String(driverCoords.latitude), drLng: String(driverCoords.longitude) })
                   },
                 })
@@ -270,19 +336,6 @@ export default function DriverHomeScreen() {
             </Marker>
           ))}
         </MapView>
-      )}
-
-      {/* ── Offline Overlay ── */}
-      {driverCoords && !isOnline && (
-        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(234, 230, 223, 0.85)', zIndex: 10, justifyContent: 'center', alignItems: 'center' }]} pointerEvents="box-none">
-          <View style={{ backgroundColor: '#FFFFFF', paddingHorizontal: 30, paddingVertical: 24, borderRadius: 28, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 18, elevation: 12, borderWidth: 1, borderColor: '#D9E9E6' }}>
-            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#E7F5F3', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
-              <Ionicons name="car-outline" size={32} color="#102A28" />
-            </View>
-            <Text style={{ fontSize: 20, fontWeight: '900', color: '#102A28' }}>You are Offline</Text>
-            <Text style={{ fontSize: 15, fontWeight: '600', color: '#617C79', marginTop: 4 }}>Go Online to receive rides</Text>
-          </View>
-        </View>
       )}
 
       {/*

@@ -13,13 +13,58 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useDriverAuth } from '@/context/driver-auth-context';
+import { useNotifications } from '@/context/notifications-context';
 import driverSocket from '@/lib/driverSocket';
-import { MAP_TILE_URL_TEMPLATE, MAP_TILE_USER_AGENT } from '@/lib/mapTiles';
+import { MAP_TILE_URL_TEMPLATE } from '@/lib/mapTiles';
 
 const teal = '#008080';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type LatLng = { latitude: number; longitude: number };
+type RouteState = { coords: LatLng[]; distanceKm: string; durationMin: number } | null;
+
+const PREVIEW_SPEED_KMH = 30;
+
+function haversineKm(from: LatLng, to: LatLng) {
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const earthKm = 6371;
+  const dLat = toRad(to.latitude - from.latitude);
+  const dLng = toRad(to.longitude - from.longitude);
+  const lat1 = toRad(from.latitude);
+  const lat2 = toRad(to.latitude);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+
+  return earthKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function createDirectRoute(from: LatLng, to: LatLng): RouteState {
+  if (!from.latitude || !from.longitude || !to.latitude || !to.longitude) return null;
+
+  const distanceKm = haversineKm(from, to);
+  return {
+    coords: [from, to],
+    distanceKm: distanceKm.toFixed(1),
+    durationMin: Math.max(1, Math.round((distanceKm / PREVIEW_SPEED_KMH) * 60)),
+  };
+}
+
+function fitRoute(map: MapView | null, route: RouteState, animated = true, delayMs = 0) {
+  if (!route?.coords.length) return;
+
+  const fit = () => {
+    map?.fitToCoordinates(route.coords, {
+      edgePadding: { top: 80, right: 40, bottom: 340, left: 40 },
+      animated,
+    });
+  };
+
+  if (delayMs > 0) setTimeout(fit, delayMs);
+  else fit();
+}
 type MapMode = 'navigate' | 'trip';  // navigate = driver→pickup | trip = pickup→dropoff
 
 // ── OSRM route fetcher ────────────────────────────────────────────────────────
@@ -48,6 +93,7 @@ async function fetchOsrmRoute(from: LatLng, to: LatLng) {
 export default function RidePreviewScreen() {
   const router = useRouter();
   const { driver } = useDriverAuth();
+  const { removeNotification } = useNotifications();
   const mapRef = useRef<MapView>(null);
 
   const params = useLocalSearchParams<{
@@ -93,62 +139,101 @@ export default function RidePreviewScreen() {
   const [mapMode, setMapMode] = useState<MapMode>(hasDriverCoords ? 'navigate' : 'trip');
 
   // ── Route state (one per mode) ────────────────────────────────────────────
-  type RouteState = { coords: LatLng[]; distanceKm: string; durationMin: number } | null;
-  const [navigateRoute, setNavigateRoute] = useState<RouteState>(null);
-  const [tripRoute, setTripRoute]         = useState<RouteState>(null);
-  const [loadingRoute, setLoadingRoute]   = useState(true);
+  const [navigateRoute, setNavigateRoute] = useState<RouteState>(() =>
+    hasDriverCoords ? createDirectRoute(driverPos, pickup) : null
+  );
+  const [tripRoute, setTripRoute]         = useState<RouteState>(() => createDirectRoute(pickup, dropoff));
+  const [loadingRoute, setLoadingRoute]   = useState(false);
   const [accepting, setAccepting]         = useState(false);
+  const mapModeRef = useRef<MapMode>(mapMode);
+
+  useEffect(() => {
+    mapModeRef.current = mapMode;
+  }, [mapMode]);
+
+  useEffect(() => {
+    const handleRemoveRideRequest = ({ rideId: removedRideId }: { rideId: string }) => {
+      if (removedRideId !== rideId) return;
+
+      removeNotification(rideId);
+      router.back();
+    };
+
+    driverSocket.on('remove_ride_request', handleRemoveRideRequest);
+    return () => {
+      driverSocket.off('remove_ride_request', handleRemoveRideRequest);
+    };
+  }, [removeNotification, rideId, router]);
 
   // ── Fetch both routes on mount ────────────────────────────────────────────
   useEffect(() => {
+    let isMounted = true;
+
     const loadRoutes = async () => {
-      setLoadingRoute(true);
+      const directNavigateRoute = hasDriverCoords ? createDirectRoute(driverPos, pickup) : null;
+      const directTripRoute = createDirectRoute(pickup, dropoff);
+
+      setNavigateRoute(directNavigateRoute);
+      setTripRoute(directTripRoute);
+      setLoadingRoute(false);
+      fitRoute(
+        mapRef.current,
+        (mapModeRef.current === 'navigate' ? directNavigateRoute : directTripRoute) ??
+          directTripRoute ??
+          directNavigateRoute,
+        true,
+        120
+      );
+
       try {
         const [navResult, tripResult] = await Promise.allSettled([
           hasDriverCoords ? fetchOsrmRoute(driverPos, pickup) : Promise.reject('no driver coords'),
           fetchOsrmRoute(pickup, dropoff),
         ]);
 
-        if (navResult.status === 'fulfilled')  setNavigateRoute(navResult.value);
-        if (tripResult.status === 'fulfilled') setTripRoute(tripResult.value);
+        if (!isMounted) return;
 
-        // Fit map to the default mode's route
-        const primaryRoute =
-          navResult.status === 'fulfilled' ? navResult.value :
-          tripResult.status === 'fulfilled' ? tripResult.value : null;
+        const nextNavigateRoute = navResult.status === 'fulfilled' ? navResult.value : directNavigateRoute;
+        const nextTripRoute = tripResult.status === 'fulfilled' ? tripResult.value : directTripRoute;
 
-        if (primaryRoute) {
-          setTimeout(() => {
-            mapRef.current?.fitToCoordinates(primaryRoute.coords, {
-              edgePadding: { top: 80, right: 40, bottom: 340, left: 40 },
-              animated: true,
-            });
-          }, 600);
-        }
+        setNavigateRoute(nextNavigateRoute);
+        setTripRoute(nextTripRoute);
+        fitRoute(
+          mapRef.current,
+          (mapModeRef.current === 'navigate' ? nextNavigateRoute : nextTripRoute) ??
+            nextTripRoute ??
+            nextNavigateRoute,
+          true,
+          80
+        );
       } catch (err) {
         console.error('[RidePreview] Route fetch error:', err);
-      } finally {
-        setLoadingRoute(false);
       }
     };
 
     loadRoutes();
+
+    return () => {
+      isMounted = false;
+    };
   }, [driverPos, dropoff, hasDriverCoords, pickup]);
 
   // ── Switch mode + re-fit map ──────────────────────────────────────────────
   const switchMode = (mode: MapMode) => {
     setMapMode(mode);
-    const targetRoute = mode === 'navigate' ? navigateRoute : tripRoute;
-    if (targetRoute?.coords.length) {
-      mapRef.current?.fitToCoordinates(targetRoute.coords, {
-        edgePadding: { top: 80, right: 40, bottom: 340, left: 40 },
-        animated: true,
-      });
-    }
+    const targetRoute =
+      mode === 'navigate'
+        ? navigateRoute ?? createDirectRoute(driverPos, pickup)
+        : tripRoute ?? createDirectRoute(pickup, dropoff);
+
+    fitRoute(mapRef.current, targetRoute, true);
   };
 
   // Active route for the map
-  const activeRoute = mapMode === 'navigate' ? navigateRoute : tripRoute;
+  const activeRoute =
+    mapMode === 'navigate'
+      ? navigateRoute ?? createDirectRoute(driverPos, pickup)
+      : tripRoute ?? createDirectRoute(pickup, dropoff);
   const activeStats = activeRoute
     ? { distance: `${activeRoute.distanceKm} km`, duration: `${activeRoute.durationMin} min` }
     : { distance: '—', duration: '—' };
@@ -202,7 +287,6 @@ export default function RidePreviewScreen() {
           urlTemplate={MAP_TILE_URL_TEMPLATE}
           maximumZ={19}
           flipY={false}
-          userAgent={MAP_TILE_USER_AGENT}
         />
 
         {/* Driver position marker (navigate mode) */}
