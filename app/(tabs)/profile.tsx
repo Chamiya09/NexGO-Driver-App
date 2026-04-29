@@ -59,7 +59,7 @@ const baseProfileSections: ProfileSection[] = [
     route: '/profile/security',
   },
   {
-    title: 'Earnings Dashboard',
+    title: 'Earnings',
     subtitle: 'View your wallet, payout settings, and daily revenue',
     icon: 'wallet-outline',
     route: '/profile/earnings',
