@@ -422,7 +422,7 @@ export default function DriverTripsScreen() {
     ? rides.find((ride) => ride.id === latestNavigation.id)
     : null;
   const canResumeNavigation = Boolean(
-    latestNavigation &&
+    latestNavigation?.id &&
     (!latestRide || (latestRide.status !== 'Completed' && latestRide.status !== 'Cancelled'))
   );
 
@@ -454,12 +454,17 @@ export default function DriverTripsScreen() {
       {canResumeNavigation && (
         <TouchableOpacity
           style={styles.resumeNavBtn}
-          onPress={() =>
+          onPress={() => {
+            if (!latestNavigation?.id) return;
+
             router.push({
               pathname: '/active-ride/[id]',
-              params: latestNavigation ?? {},
-            })
-          }
+              params: {
+                ...latestNavigation,
+                id: latestNavigation.id,
+              },
+            });
+          }}
         >
           <View style={styles.resumeNavIcon}>
             <Ionicons name="navigate" size={18} color="#FFFFFF" />

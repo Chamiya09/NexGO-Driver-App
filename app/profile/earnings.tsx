@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 
 const teal = '#008080';
 
@@ -21,6 +22,14 @@ export default function EarningsScreen() {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        <View style={styles.topBar}>
+          <Pressable style={styles.backButton} onPress={() => router.back()}>
+            <Ionicons name="chevron-back" size={22} color="#102A28" />
+          </Pressable>
+          <Text style={styles.topBarTitle}>Earnings Dashboard</Text>
+          <View style={styles.topBarSpacer} />
+        </View>
+
         <View style={styles.header}>
           <Text style={styles.eyebrow}>EARNINGS</Text>
           <Text style={styles.title}>Your driver wallet</Text>
@@ -102,8 +111,33 @@ const styles = StyleSheet.create({
   },
   container: {
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 12,
     paddingBottom: 34,
+  },
+  topBar: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  backButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topBarTitle: {
+    color: '#102A28',
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  topBarSpacer: {
+    width: 38,
   },
   header: {
     marginBottom: 16,
