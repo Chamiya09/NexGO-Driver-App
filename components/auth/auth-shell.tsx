@@ -3,7 +3,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
-  ScrollView,
   StatusBar as RNStatusBar,
   StyleSheet,
   Text,
@@ -11,6 +10,8 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+
+import RefreshableScrollView from '@/components/RefreshableScrollView';
 
 type Props = {
   eyebrow: string;
@@ -24,7 +25,7 @@ export default function AuthShell({ eyebrow, title, subtitle, children }: Props)
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
       <KeyboardAvoidingView style={styles.keyboardWrap} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView
+        <RefreshableScrollView
           contentContainerStyle={styles.container}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
@@ -47,7 +48,7 @@ export default function AuthShell({ eyebrow, title, subtitle, children }: Props)
 
             <View style={styles.content}>{children}</View>
           </View>
-        </ScrollView>
+        </RefreshableScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
