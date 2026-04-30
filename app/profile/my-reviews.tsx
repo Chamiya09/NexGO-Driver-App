@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -134,14 +134,6 @@ export default function DriverMyReviewsScreen() {
     }, [loadReviews])
   );
 
-  const stats = useMemo(() => {
-    const approvedReviews = rides.filter((ride) => ride.review?.status === 'approved');
-    const totalRating = approvedReviews.reduce((sum, ride) => sum + (ride.review?.rating ?? 0), 0);
-    const average = approvedReviews.length ? (totalRating / approvedReviews.length).toFixed(1) : 'New';
-
-    return { average, approved: approvedReviews.length, total: rides.length };
-  }, [rides]);
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
@@ -175,36 +167,6 @@ export default function DriverMyReviewsScreen() {
           </View>
 
           <Text style={styles.heroHint}>Only admin-approved passenger reviews are shown here and counted toward your public driver rating.</Text>
-        </View>
-
-        <Text style={styles.sectionTitle}>REVIEW OVERVIEW</Text>
-
-        <View style={styles.groupCard}>
-          <View style={styles.setupHeaderRow}>
-            <View style={styles.detailsHeader}>
-              <View style={styles.reviewIntroIcon}>
-                <Ionicons name="star-outline" size={20} color={teal} />
-              </View>
-
-              <View style={styles.detailsHeaderText}>
-                <Text style={styles.detailsTitle}>Review summary</Text>
-                <Text style={styles.detailsHint}>Track approved ratings and passenger comments visible on your public driver profile.</Text>
-              </View>
-            </View>
-
-            <Pressable
-              style={[styles.refreshButton, refreshing && styles.refreshButtonDisabled]}
-              onPress={() => loadReviews(true)}
-              disabled={refreshing}>
-              <Ionicons name="refresh" size={18} color={teal} />
-            </Pressable>
-          </View>
-        </View>
-
-        <View style={styles.metricsRow}>
-          <MetricCard label="Average" value={stats.average} icon="star-outline" />
-          <MetricCard label="Approved" value={String(stats.approved)} icon="checkmark-circle-outline" />
-          <MetricCard label="Visible" value={String(stats.total)} icon="eye-outline" />
         </View>
 
         <Text style={styles.sectionTitle}>SAVED REVIEWS</Text>
@@ -290,16 +252,6 @@ export default function DriverMyReviewsScreen() {
         </View>
       ) : null}
     </SafeAreaView>
-  );
-}
-
-function MetricCard({ label, value, icon }: { label: string; value: string; icon: keyof typeof Ionicons.glyphMap }) {
-  return (
-    <View style={styles.metricCard}>
-      <Ionicons name={icon} size={17} color={teal} />
-      <Text style={styles.metricValue}>{value}</Text>
-      <Text style={styles.metricLabel}>{label}</Text>
-    </View>
   );
 }
 
@@ -490,89 +442,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     marginBottom: 6,
     marginTop: 2,
-  },
-  groupCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#D9E9E6',
-    backgroundColor: '#FFFFFF',
-    overflow: 'hidden',
-    marginBottom: 12,
-    padding: 12,
-  },
-  setupHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  detailsHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    flex: 1,
-  },
-  reviewIntroIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: '#E7F5F3',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  detailsHeaderText: {
-    flex: 1,
-  },
-  detailsTitle: {
-    color: '#102A28',
-    fontSize: 15,
-    fontWeight: '800',
-    marginBottom: 2,
-  },
-  detailsHint: {
-    color: '#617C79',
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '500',
-  },
-  refreshButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 1,
-    borderColor: '#D9E9E6',
-    backgroundColor: '#E7F5F3',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  refreshButtonDisabled: {
-    opacity: 0.55,
-  },
-  metricsRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 12,
-  },
-  metricCard: {
-    flex: 1,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#D9E9E6',
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 10,
-    alignItems: 'center',
-    gap: 3,
-  },
-  metricValue: {
-    color: '#102A28',
-    fontSize: 15,
-    fontWeight: '900',
-    fontVariant: ['tabular-nums'],
-  },
-  metricLabel: {
-    color: '#617C79',
-    fontSize: 11,
-    fontWeight: '700',
   },
   feedbackCard: {
     borderRadius: 14,
