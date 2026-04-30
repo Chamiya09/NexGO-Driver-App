@@ -105,14 +105,14 @@ export default function DriverMyReviewsScreen() {
     setError('');
 
     try {
-      const response = await fetch(`${API_BASE_URL}/rides/driver-rides?refresh=${Date.now()}`, {
+      const response = await fetch(`${API_BASE_URL}/rides/driver-reviews?refresh=${Date.now()}`, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Cache-Control': 'no-cache',
         },
       });
-      const data = await parseApiResponse<{ rides?: DriverReviewRide[] }>(response);
-      const reviewedRides = (data.rides ?? [])
+      const data = await parseApiResponse<{ reviews?: DriverReviewRide[]; rides?: DriverReviewRide[] }>(response);
+      const reviewedRides = (data.reviews ?? data.rides ?? [])
         .filter((ride) => ride.review?.status === 'approved')
         .sort((a, b) =>
           new Date(b.review?.submittedAt ?? b.review?.reviewedAt ?? b.completedAt ?? b.requestedAt).getTime() -
