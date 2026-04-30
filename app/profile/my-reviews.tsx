@@ -1,13 +1,16 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   SafeAreaView,
   StyleSheet,
   Text,
+  StatusBar as RNStatusBar,
   View,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import RefreshableScrollView from '@/components/RefreshableScrollView';
@@ -110,7 +113,7 @@ export default function DriverMyReviewsScreen() {
       });
       const data = await parseApiResponse<{ rides?: DriverReviewRide[] }>(response);
       const reviewedRides = (data.rides ?? [])
-        .filter((ride) => Boolean(ride.review))
+        .filter((ride) => ride.review?.status === 'approved')
         .sort((a, b) =>
           new Date(b.review?.submittedAt ?? b.review?.reviewedAt ?? b.completedAt ?? b.requestedAt).getTime() -
           new Date(a.review?.submittedAt ?? a.review?.reviewedAt ?? a.completedAt ?? a.requestedAt).getTime()
@@ -135,32 +138,76 @@ export default function DriverMyReviewsScreen() {
     const approvedReviews = rides.filter((ride) => ride.review?.status === 'approved');
     const totalRating = approvedReviews.reduce((sum, ride) => sum + (ride.review?.rating ?? 0), 0);
     const average = approvedReviews.length ? (totalRating / approvedReviews.length).toFixed(1) : 'New';
-    const pending = rides.filter((ride) => ride.review?.status !== 'approved' && ride.review?.status !== 'rejected').length;
 
-    return { average, approved: approvedReviews.length, pending };
+    return { average, approved: approvedReviews.length, total: rides.length };
   }, [rides]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <StatusBar style="dark" />
       <RefreshableScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
         onRefreshPage={() => loadReviews(true)}>
+        <View style={styles.topBar}>
+          <Pressable style={styles.backButton} onPress={() => router.back()}>
+            <Ionicons name="chevron-back" size={22} color="#102A28" />
+          </Pressable>
+          <Text style={styles.topBarTitle}>My Reviews</Text>
+          <View style={styles.topBarSpacer} />
+        </View>
+
         <View style={styles.heroCard}>
-          <View style={styles.heroIcon}>
-            <Ionicons name="star-half-outline" size={24} color={teal} />
+          <View style={styles.heroTopRow}>
+            <View style={styles.heroIcon}>
+              <Ionicons name="star-half-outline" size={28} color={teal} />
+            </View>
+
+            <View style={styles.heroIdentity}>
+              <Text style={styles.heroName}>Driver Reviews</Text>
+              <Text style={styles.heroSubline}>Review passenger feedback from completed NexGO trips.</Text>
+            </View>
           </View>
-          <View style={styles.heroText}>
-            <Text style={styles.heroTitle}>My Reviews</Text>
-            <Text style={styles.heroSubtitle}>Passenger feedback from your completed rides.</Text>
+
+          <View style={styles.heroBadge}>
+            <Ionicons name="shield-checkmark-outline" size={15} color={teal} />
+            <Text style={styles.heroBadgeText}>Passenger feedback</Text>
+          </View>
+
+          <Text style={styles.heroHint}>Only admin-approved passenger reviews are shown here and counted toward your public driver rating.</Text>
+        </View>
+
+        <Text style={styles.sectionTitle}>REVIEW OVERVIEW</Text>
+
+        <View style={styles.groupCard}>
+          <View style={styles.setupHeaderRow}>
+            <View style={styles.detailsHeader}>
+              <View style={styles.reviewIntroIcon}>
+                <Ionicons name="star-outline" size={20} color={teal} />
+              </View>
+
+              <View style={styles.detailsHeaderText}>
+                <Text style={styles.detailsTitle}>Review summary</Text>
+                <Text style={styles.detailsHint}>Track approved ratings and passenger comments visible on your public driver profile.</Text>
+              </View>
+            </View>
+
+            <Pressable
+              style={[styles.refreshButton, refreshing && styles.refreshButtonDisabled]}
+              onPress={() => loadReviews(true)}
+              disabled={refreshing}>
+              <Ionicons name="refresh" size={18} color={teal} />
+            </Pressable>
           </View>
         </View>
 
         <View style={styles.metricsRow}>
           <MetricCard label="Average" value={stats.average} icon="star-outline" />
           <MetricCard label="Approved" value={String(stats.approved)} icon="checkmark-circle-outline" />
-          <MetricCard label="Pending" value={String(stats.pending)} icon="time-outline" />
+          <MetricCard label="Visible" value={String(stats.total)} icon="eye-outline" />
         </View>
+
+        <Text style={styles.sectionTitle}>SAVED REVIEWS</Text>
 
         {error ? (
           <View style={styles.feedbackCard}>
@@ -179,8 +226,8 @@ export default function DriverMyReviewsScreen() {
             <View style={styles.emptyIcon}>
               <Ionicons name="star-outline" size={25} color={teal} />
             </View>
-            <Text style={styles.emptyTitle}>No reviews yet</Text>
-            <Text style={styles.emptyText}>Passenger reviews will appear here after completed rides.</Text>
+            <Text style={styles.emptyTitle}>No approved reviews yet</Text>
+            <Text style={styles.emptyText}>Approved passenger reviews will appear here after admin moderation.</Text>
           </View>
         ) : (
           <View style={styles.reviewList}>
@@ -342,50 +389,169 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#F4F8F7',
+    paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
   },
   container: {
-    padding: 16,
-    paddingBottom: 30,
-    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 28,
+  },
+  topBar: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  backButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topBarTitle: {
+    color: '#102A28',
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  topBarSpacer: {
+    width: 38,
   },
   heroCard: {
-    minHeight: 92,
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#D9E9E6',
     backgroundColor: '#FFFFFF',
-    padding: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    marginBottom: 12,
+  },
+  heroTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    marginBottom: 10,
   },
   heroIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
     backgroundColor: '#E7F5F3',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heroText: {
+  heroIdentity: {
     flex: 1,
-    minWidth: 0,
   },
-  heroTitle: {
+  heroName: {
     color: '#102A28',
-    fontSize: 19,
-    fontWeight: '900',
-    marginBottom: 3,
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 2,
   },
-  heroSubtitle: {
+  heroSubline: {
     color: '#617C79',
     fontSize: 12,
-    fontWeight: '600',
     lineHeight: 17,
+    fontWeight: '500',
+  },
+  heroBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#E7F5F3',
+  },
+  heroBadgeText: {
+    color: teal,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  heroHint: {
+    color: '#617C79',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+  sectionTitle: {
+    color: '#617C79',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    marginBottom: 6,
+    marginTop: 2,
+  },
+  groupCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+    marginBottom: 12,
+    padding: 12,
+  },
+  setupHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  detailsHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    flex: 1,
+  },
+  reviewIntroIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: '#E7F5F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailsHeaderText: {
+    flex: 1,
+  },
+  detailsTitle: {
+    color: '#102A28',
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  detailsHint: {
+    color: '#617C79',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '500',
+  },
+  refreshButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#E7F5F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  refreshButtonDisabled: {
+    opacity: 0.55,
   },
   metricsRow: {
     flexDirection: 'row',
     gap: 10,
+    marginBottom: 12,
   },
   metricCard: {
     flex: 1,
@@ -474,20 +640,25 @@ const styles = StyleSheet.create({
   reviewCard: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#D9E9E6',
+    borderColor: '#CFE4E0',
     backgroundColor: '#FFFFFF',
-    padding: 12,
-    gap: 10,
+    overflow: 'hidden',
+    marginBottom: 12,
   },
   reviewTopRow: {
+    padding: 14,
+    backgroundColor: '#F7FBFA',
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
   },
   reviewIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
     backgroundColor: '#FFF8EC',
     alignItems: 'center',
     justifyContent: 'center',
@@ -498,9 +669,9 @@ const styles = StyleSheet.create({
   },
   reviewTitle: {
     color: '#102A28',
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: '900',
-    marginBottom: 2,
+    marginBottom: 6,
   },
   reviewMeta: {
     color: '#617C79',
@@ -511,6 +682,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#D9E9E6',
   },
   starRow: {
     flexDirection: 'row',
@@ -528,6 +703,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#F7FBFA',
     paddingHorizontal: 10,
     paddingVertical: 9,
+    marginHorizontal: 12,
+    marginTop: 10,
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 7,
@@ -540,6 +717,9 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   detailsButton: {
+    marginHorizontal: 12,
+    marginTop: 10,
+    marginBottom: 12,
     minHeight: 38,
     borderRadius: 12,
     borderWidth: 1,
