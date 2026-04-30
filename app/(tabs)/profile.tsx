@@ -4,7 +4,6 @@ import {
   Platform,
   Pressable,
   SafeAreaView,
-  ScrollView,
   StatusBar as RNStatusBar,
   StyleSheet,
   Text,
@@ -14,6 +13,7 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import RefreshableScrollView from '@/components/RefreshableScrollView';
 import { useDriverAuth } from '@/context/driver-auth-context';
 
 const teal = '#008080';
@@ -67,7 +67,7 @@ const baseProfileSections: ProfileSection[] = [
 ];
 
 export default function DriverProfileScreen() {
-  const { driver, logout } = useDriverAuth();
+  const { driver, logout, refreshDriver } = useDriverAuth();
 
   const fullName = driver?.fullName || 'NexGO Driver';
   const documents = driver?.documents || [];
@@ -111,7 +111,10 @@ export default function DriverProfileScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <RefreshableScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+        onRefreshPage={refreshDriver}>
         <View style={styles.heroCard}>
           <View style={styles.profileHead}>
             <View style={styles.avatarCircle}>
@@ -192,7 +195,7 @@ export default function DriverProfileScreen() {
           <Text style={styles.footerTop}>NexGO Driver</Text>
           <Text style={styles.footerBottom}>Version 1.0.0 (driver foundation)</Text>
         </View>
-      </ScrollView>
+      </RefreshableScrollView>
     </SafeAreaView>
   );
 }

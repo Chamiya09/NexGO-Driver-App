@@ -4,7 +4,6 @@ import {
   Platform,
   Pressable,
   SafeAreaView,
-  ScrollView,
   StatusBar as RNStatusBar,
   StyleSheet,
   Text,
@@ -14,6 +13,7 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import RefreshableScrollView from '@/components/RefreshableScrollView';
 import { type DriverDocument as SavedDriverDocument, useDriverAuth } from '@/context/driver-auth-context';
 import {
   captureDriverDocumentImage,
@@ -126,7 +126,7 @@ const buildDocumentsFromDriver = (savedDocuments: SavedDriverDocument[] = []) =>
   });
 
 export default function DriverDocumentUploadsScreen() {
-  const { driver, updateDocument } = useDriverAuth();
+  const { driver, updateDocument, refreshDriver } = useDriverAuth();
   const [uploadingDocumentId, setUploadingDocumentId] = useState<DriverDocumentType | null>(null);
   const documents = useMemo(() => buildDocumentsFromDriver(driver?.documents), [driver?.documents]);
 
@@ -182,7 +182,10 @@ export default function DriverDocumentUploadsScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <RefreshableScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+        onRefreshPage={refreshDriver}>
         <View style={styles.topBar}>
           <Pressable style={styles.backButton} onPress={() => router.back()}>
             <Ionicons name="chevron-back" size={22} color="#102A28" />
@@ -235,7 +238,7 @@ export default function DriverDocumentUploadsScreen() {
           <GuidelineRow icon="scan-outline" text="Avoid blur, glare, cropped IDs, or screenshots from messaging apps." />
           <GuidelineRow icon="lock-closed-outline" text="Your documents are used only for driver verification and safety checks." />
         </View>
-      </ScrollView>
+      </RefreshableScrollView>
     </SafeAreaView>
   );
 }

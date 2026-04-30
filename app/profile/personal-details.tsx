@@ -17,6 +17,7 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import RefreshableScrollView from '@/components/RefreshableScrollView';
 import { useDriverAuth } from '@/context/driver-auth-context';
 
 const teal = '#008080';
@@ -31,7 +32,7 @@ const emptyDriverDetails = {
 type DriverDetailsField = keyof typeof emptyDriverDetails;
 
 export default function DriverPersonalDetailsScreen() {
-  const { driver, updateProfile } = useDriverAuth();
+  const { driver, updateProfile, refreshDriver } = useDriverAuth();
   const driverDetails = useMemo(() => ({
     fullName: driver?.fullName || emptyDriverDetails.fullName,
     email: driver?.email || emptyDriverDetails.email,
@@ -122,7 +123,10 @@ export default function DriverPersonalDetailsScreen() {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
       <KeyboardAvoidingView style={styles.keyboardWrap} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        <RefreshableScrollView
+          contentContainerStyle={styles.container}
+          showsVerticalScrollIndicator={false}
+          onRefreshPage={refreshDriver}>
           <View style={styles.topBar}>
             <Pressable style={styles.backButton} onPress={() => router.back()}>
               <Ionicons name="chevron-back" size={22} color="#102A28" />
@@ -195,7 +199,7 @@ export default function DriverPersonalDetailsScreen() {
               </Pressable>
             </View>
           </View>
-        </ScrollView>
+        </RefreshableScrollView>
       </KeyboardAvoidingView>
 
       <Modal visible={isEditModalVisible} transparent animationType="fade" onRequestClose={closeEditModal}>

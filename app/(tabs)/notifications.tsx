@@ -2,10 +2,11 @@
 // Driver App — Ride Request Notifications Screen
 // Shows all incoming ride requests with passenger location details.
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   FlatList,
   Platform,
+  RefreshControl,
   StatusBar as RNStatusBar,
   StyleSheet,
   Text,
@@ -140,6 +141,7 @@ function EmptyState() {
 export default function NotificationsScreen() {
   const router = useRouter();
   const { notifications, unreadCount, markAllRead, markRead, clearAll } = useNotifications();
+  const [refreshing, setRefreshing] = useState(false);
 
   const handlePress = useCallback(
     (item: RideNotification) => {
@@ -163,6 +165,12 @@ export default function NotificationsScreen() {
     },
     [markRead, router]
   );
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    setRefreshing(false);
+  }, []);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -209,6 +217,14 @@ export default function NotificationsScreen() {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={<EmptyState />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[teal]}
+            tintColor={teal}
+          />
+        }
       />
     </SafeAreaView>
   );

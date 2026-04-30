@@ -3,7 +3,6 @@ import {
   Platform,
   Pressable,
   SafeAreaView,
-  ScrollView,
   StatusBar as RNStatusBar,
   StyleSheet,
   Text,
@@ -12,6 +11,8 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+
+import RefreshableScrollView from '@/components/RefreshableScrollView';
 
 const teal = '#008080';
 
@@ -87,7 +88,7 @@ export default function EarningsScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <RefreshableScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.topBar}>
           <Pressable style={styles.backButton} onPress={() => router.back()}>
             <Ionicons name="chevron-back" size={22} color="#102A28" />
@@ -159,7 +160,7 @@ export default function EarningsScreen() {
           <GuidelineRow icon="card-outline" text="Bank payouts follow the active settlement schedule on your driver account." />
           <GuidelineRow icon="shield-checkmark-outline" text="Keep documents and account security updated to avoid payout delays." />
         </View>
-      </ScrollView>
+      </RefreshableScrollView>
     </SafeAreaView>
   );
 }

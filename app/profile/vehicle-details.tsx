@@ -17,6 +17,7 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import RefreshableScrollView from '@/components/RefreshableScrollView';
 import { type DriverVehicle, useDriverAuth } from '@/context/driver-auth-context';
 
 const teal = '#008080';
@@ -212,7 +213,11 @@ export default function DriverVehicleDetailsScreen() {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
       <KeyboardAvoidingView style={styles.keyboardWrap} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <RefreshableScrollView
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          onRefreshPage={() => loadVehicle({ showSuccess: true })}>
           <View style={styles.topBar}>
             <Pressable style={styles.backButton} onPress={() => router.back()}>
               <Ionicons name="chevron-back" size={22} color="#102A28" />
@@ -336,7 +341,7 @@ export default function DriverVehicleDetailsScreen() {
               </View>
             </>
           ) : null}
-        </ScrollView>
+        </RefreshableScrollView>
       </KeyboardAvoidingView>
 
       <Modal visible={isVehicleModalVisible} transparent animationType="fade" onRequestClose={closeVehicleModal}>

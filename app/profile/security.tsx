@@ -18,12 +18,13 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import RefreshableScrollView from '@/components/RefreshableScrollView';
 import { useDriverAuth } from '@/context/driver-auth-context';
 
 const teal = '#008080';
 
 export default function DriverSecurityScreen() {
-  const { driver, loading, changePassword, updateSecurity } = useDriverAuth();
+  const { driver, loading, changePassword, updateSecurity, refreshDriver } = useDriverAuth();
   const [twoStepEnabled, setTwoStepEnabled] = useState(driver?.security?.twoStepVerificationEnabled ?? true);
   const [isPasswordModalVisible, setIsPasswordModalVisible] = useState(false);
   const [passwordForm, setPasswordForm] = useState({
@@ -126,7 +127,10 @@ export default function DriverSecurityScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <RefreshableScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+        onRefreshPage={refreshDriver}>
         <View style={styles.topBar}>
           <Pressable style={styles.backButton} onPress={() => router.back()}>
             <Ionicons name="chevron-back" size={22} color="#102A28" />
@@ -178,7 +182,7 @@ export default function DriverSecurityScreen() {
             }}
           />
         </View>
-      </ScrollView>
+      </RefreshableScrollView>
 
       <Modal visible={isPasswordModalVisible} transparent animationType="fade" onRequestClose={closePasswordModal}>
         <View style={styles.modalOverlay}>
