@@ -38,6 +38,12 @@ type DriverReviewRide = {
   status: string;
   requestedAt: string;
   completedAt?: string | null;
+  passenger?: {
+    fullName?: string;
+    email?: string;
+    phoneNumber?: string;
+    profileImageUrl?: string;
+  } | null;
   review?: RideReview | null;
 };
 
@@ -197,9 +203,9 @@ export default function DriverMyReviewsScreen() {
                   <Ionicons name="star-half-outline" size={20} color={teal} />
                 </View>
                 <View style={styles.popupTitleWrap}>
-                  <Text style={styles.popupTitle}>Review Details</Text>
+              <Text style={styles.popupTitle}>Review Details</Text>
                   <Text style={styles.popupSubtitle} numberOfLines={1}>
-                    {formatDate(selectedReview.review?.submittedAt ?? selectedReview.review?.reviewedAt)}
+                    {selectedReview.passenger?.fullName || 'Passenger not available'}
                   </Text>
                 </View>
               </View>
@@ -219,9 +225,16 @@ export default function DriverMyReviewsScreen() {
             </View>
 
             <View style={styles.popupDetailsBox}>
+              <Text style={styles.popupSectionLabel}>PASSENGER DETAILS</Text>
+              <DetailLine icon="person-outline" label="Passenger" value={selectedReview.passenger?.fullName || 'Passenger not available'} />
+              <DetailLine icon="call-outline" label="Phone" value={selectedReview.passenger?.phoneNumber || 'Not available'} />
+              <DetailLine icon="mail-outline" label="Email" value={selectedReview.passenger?.email || 'Not available'} />
+            </View>
+
+            <View style={styles.popupDetailsBox}>
+              <Text style={styles.popupSectionLabel}>RIDE DETAILS</Text>
               <DetailLine icon="radio-button-on" label="Pickup" value={shortenLocation(selectedReview.pickup)} />
               <DetailLine icon="location" label="Drop-off" value={shortenLocation(selectedReview.dropoff)} />
-              <DetailLine icon="car-outline" label="Vehicle" value={selectedReview.vehicleType || 'Vehicle'} />
               <DetailLine icon="wallet-outline" label="Fare" value={formatMoney(selectedReview.price)} />
               <DetailLine icon="calendar-outline" label="Completed" value={formatDate(selectedReview.completedAt)} />
               <DetailLine icon="time-outline" label="Moderated" value={formatDate(selectedReview.review?.moderatedAt)} />
@@ -254,10 +267,10 @@ function ReviewCard({ ride, onView }: { ride: DriverReviewRide; onView: () => vo
         </View>
         <View style={styles.reviewTitleWrap}>
           <Text style={styles.reviewTitle} numberOfLines={1}>
-            {ride.pickup?.name || 'Pickup'} to {ride.dropoff?.name || 'Drop-off'}
+            {ride.passenger?.fullName || 'Passenger not available'}
           </Text>
           <Text style={styles.reviewMeta} numberOfLines={1}>
-            {ride.vehicleType} | {formatDate(review?.submittedAt ?? review?.reviewedAt)}
+            {ride.passenger?.phoneNumber || 'No phone'} | {formatDate(review?.submittedAt ?? review?.reviewedAt)}
           </Text>
         </View>
         <StatusBadge status={review?.status} />
