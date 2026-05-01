@@ -139,7 +139,7 @@ export default function DriverSupportHelpScreen() {
           <TextInput
             value={rideReference}
             onChangeText={setRideReference}
-            placeholder="Ride ID or reference (optional)"
+            placeholder="Reference (Optional)"
             placeholderTextColor="#8AA09D"
             style={styles.input}
           />
