@@ -26,6 +26,7 @@ type ProfileSection = {
     | '/profile/personal-details'
     | '/profile/vehicle-details'
     | '/profile/document-uploads'
+    | '/profile/my-reviews'
     | '/profile/security'
     | '/profile/earnings';
   badge?: string;
@@ -63,6 +64,12 @@ const baseProfileSections: ProfileSection[] = [
     subtitle: 'View your wallet, payout settings, and daily revenue',
     icon: 'wallet-outline',
     route: '/profile/earnings',
+  },
+  {
+    title: 'My Reviews',
+    subtitle: 'See passenger ratings and review status',
+    icon: 'star-half-outline',
+    route: '/profile/my-reviews',
   },
 ];
 
