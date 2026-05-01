@@ -28,7 +28,9 @@ type ProfileSection = {
     | '/profile/document-uploads'
     | '/profile/my-reviews'
     | '/profile/security'
-    | '/profile/earnings';
+    | '/profile/earnings'
+    | '/profile/support-help'
+    | '/profile/my-support-tickets';
   badge?: string;
 };
 
@@ -70,6 +72,19 @@ const baseProfileSections: ProfileSection[] = [
     subtitle: 'See passenger ratings and review status',
     icon: 'star-half-outline',
     route: '/profile/my-reviews',
+  },
+  {
+    title: 'Driver Support',
+    subtitle: 'Open payout, trip, vehicle, or account support tickets',
+    icon: 'headset-outline',
+    route: '/profile/support-help',
+  },
+  {
+    title: 'My Support Tickets',
+    subtitle: 'Track your driver support requests and admin replies',
+    icon: 'file-tray-full-outline',
+    route: '/profile/my-support-tickets',
+    badge: 'NEW',
   },
 ];
 
