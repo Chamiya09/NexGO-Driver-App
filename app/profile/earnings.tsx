@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import RefreshableScrollView from '@/components/RefreshableScrollView';
 import { useDriverAuth } from '@/context/driver-auth-context';
-import { fetchDriverStats, formatLkr, type DriverStats } from '@/lib/driver-stats';
+import { fetchDriverStats, formatLkr, type DriverActivity, type DriverStats } from '@/lib/driver-stats';
 
 const teal = '#008080';
 
@@ -64,24 +64,6 @@ function buildEarningsCards(stats: DriverStats | null): EarningsCardItem[] {
       value: formatLkr(stats?.availableBalance ?? 0),
       updatedAt: stats ? `${stats.completedRides} completed rides` : 'Loading ride data',
       status: 'ready',
-    },
-    {
-      id: 'pending',
-      title: 'Pending Payout',
-      subtitle: 'Accepted or in-progress ride value',
-      icon: 'hourglass-outline',
-      value: formatLkr(stats?.pendingPayout ?? 0),
-      updatedAt: stats ? `${stats.activeRides} active rides` : 'Loading ride data',
-      status: 'processing',
-    },
-    {
-      id: 'next',
-      title: 'Next Settlement',
-      subtitle: 'Scheduled bank transfer window',
-      icon: 'business-outline',
-      value: stats?.nextSettlementLabel ?? 'Loading...',
-      updatedAt: 'Bank transfer',
-      status: 'scheduled',
     },
   ];
 }
@@ -136,8 +118,8 @@ export default function EarningsScreen() {
   const cashoutIsValid =
     Number.isFinite(cashoutValue) && cashoutValue > 0 && cashoutValue <= availableBalance;
 
-  const handleCashout = () => {
-    if (!cashoutIsValid) {
+  const executeCashout = (amount, onComplete) => {
+    if (!Number.isFinite(amount) || amount <= 0 || amount > availableBalance) {
       Alert.alert('Invalid amount', 'Enter a cashout amount within your available balance.');
       return;
     }
@@ -146,15 +128,22 @@ export default function EarningsScreen() {
       current
         ? {
             ...current,
-            availableBalance: Math.max(0, current.availableBalance - cashoutValue),
-            pendingPayout: (current.pendingPayout ?? 0) + cashoutValue,
+            availableBalance: Math.max(0, current.availableBalance - amount),
+            pendingPayout: (current.pendingPayout ?? 0) + amount,
           }
         : current
     );
 
-    setCashoutAmount('');
-    setCashoutVisible(false);
+    onComplete();
   };
+
+  const handleCashout = () => {
+    executeCashout(cashoutValue, () => {
+      setCashoutAmount('');
+      setCashoutVisible(false);
+    });
+  };
+
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -288,7 +277,36 @@ export default function EarningsScreen() {
               Cashouts are processed within 1-2 business days after verification.
             </Text>
           </View>
+
         </View>
+
+        <Text style={styles.sectionTitle}>RECENT ACTIVITIES</Text>
+
+        {stats?.recentActivities?.length ? (
+          <View style={styles.activityCard}>
+            {stats.recentActivities.map((activity) => {
+              const tone = getActivityTone(activity.status);
+
+              return (
+                <View key={activity.id} style={styles.activityRow}>
+                  <View style={[styles.activityIconWrap, { backgroundColor: tone.bg }]}>
+                    <Ionicons name={tone.icon} size={14} color={tone.text} />
+                  </View>
+                  <View style={styles.activityTextWrap}>
+                    <Text style={styles.activityTitle}>{formatActivityTitle(activity.status)}</Text>
+                    <Text style={styles.activitySubtitle}>{activity.dateLabel}</Text>
+                  </View>
+                  <Text style={styles.activityAmount}>{formatLkr(activity.amount)}</Text>
+                </View>
+              );
+            })}
+          </View>
+        ) : (
+          <View style={styles.emptyActivityCard}>
+            <Ionicons name="pulse-outline" size={18} color={teal} />
+            <Text style={styles.emptyActivityText}>No recent activities yet.</Text>
+          </View>
+        )}
 
         <Modal transparent visible={cashoutVisible} animationType="fade" onRequestClose={() => setCashoutVisible(false)}>
           <View style={styles.cashoutOverlay}>
@@ -328,6 +346,7 @@ export default function EarningsScreen() {
             </View>
           </View>
         </Modal>
+
 
         <Text style={styles.sectionTitle}>WEEKLY PERFORMANCE</Text>
 
@@ -414,6 +433,25 @@ function GuidelineRow({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; te
       <Text style={styles.guidelineText}>{text}</Text>
     </View>
   );
+}
+
+function getActivityTone(status: DriverActivity['status']) {
+  if (status === 'Completed') {
+    return { text: '#157A62', bg: '#E9F8EF', icon: 'checkmark-circle-outline' as const };
+  }
+  if (status === 'Cancelled') {
+    return { text: '#C13B3B', bg: '#FFF1F1', icon: 'close-circle-outline' as const };
+  }
+  if (status === 'Pending') {
+    return { text: '#9A6B00', bg: '#FFF7E0', icon: 'time-outline' as const };
+  }
+
+  return { text: teal, bg: '#E7F5F3', icon: 'navigate-outline' as const };
+}
+
+function formatActivityTitle(status: DriverActivity['status']) {
+  if (status === 'InProgress') return 'Ride in progress';
+  return `${status} ride`;
 }
 
 const styles = StyleSheet.create({
@@ -816,6 +854,62 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginTop: 14,
+  },
+  activityCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    marginBottom: 12,
+    gap: 10,
+  },
+  activityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  activityIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activityTextWrap: {
+    flex: 1,
+  },
+  activityTitle: {
+    color: '#102A28',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  activitySubtitle: {
+    color: '#617C79',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  activityAmount: {
+    color: '#102A28',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  emptyActivityCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  emptyActivityText: {
+    color: '#617C79',
+    fontSize: 12,
+    fontWeight: '600',
   },
   chartCard: {
     borderRadius: 16,

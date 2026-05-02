@@ -15,6 +15,13 @@ type DriverReviewRide = DriverRide & {
   } | null;
 };
 
+export type DriverActivity = {
+  id: string;
+  status: string;
+  amount: number;
+  dateLabel: string;
+};
+
 export type DriverStats = {
   totalRides: number;
   completedRides: number;
@@ -26,6 +33,7 @@ export type DriverStats = {
   reviewCount: number;
   weeklyEarnings: number[];
   nextSettlementLabel: string;
+  recentActivities: DriverActivity[];
 };
 
 const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -51,6 +59,11 @@ function isSameLocalDay(first: Date, second: Date) {
     first.getMonth() === second.getMonth() &&
     first.getDate() === second.getDate()
   );
+}
+
+function formatActivityDate(date: Date | null) {
+  if (!date) return 'Recent';
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 function getNextFridaySettlement() {
@@ -86,6 +99,20 @@ export async function fetchDriverStats(token: string): Promise<DriverStats> {
 
   const completedRides = rides.filter((ride) => ride.status === 'Completed');
   const activeRides = rides.filter((ride) => ride.status === 'Accepted' || ride.status === 'InProgress');
+  const recentActivities = rides
+    .slice()
+    .sort((first, second) => {
+      const firstDate = getRideDate(first);
+      const secondDate = getRideDate(second);
+      return (secondDate?.getTime() ?? 0) - (firstDate?.getTime() ?? 0);
+    })
+    .slice(0, 4)
+    .map((ride) => ({
+      id: ride.id,
+      status: ride.status,
+      amount: Number(ride.price) || 0,
+      dateLabel: formatActivityDate(getRideDate(ride)),
+    }));
 
   completedRides.forEach((ride) => {
     const rideDate = getRideDate(ride);
@@ -111,5 +138,6 @@ export async function fetchDriverStats(token: string): Promise<DriverStats> {
     reviewCount: ratings.length,
     weeklyEarnings,
     nextSettlementLabel: getNextFridaySettlement(),
+    recentActivities,
   };
 }
