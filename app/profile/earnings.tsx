@@ -1,5 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import {
+  Alert,
+  Modal,
   Platform,
   Pressable,
   SafeAreaView,
@@ -94,6 +96,8 @@ export default function EarningsScreen() {
     accountNumber: '',
     branch: '',
   });
+  const [cashoutVisible, setCashoutVisible] = useState(false);
+  const [cashoutAmount, setCashoutAmount] = useState('');
   const completedMetrics = stats
     ? [stats.availableBalance > 0, stats.completedRides > 0, stats.reviewCount > 0].filter(Boolean).length
     : 0;
@@ -126,6 +130,31 @@ export default function EarningsScreen() {
     bankDetails.bankName.trim().length > 0 &&
     bankDetails.accountName.trim().length > 0 &&
     bankDetails.accountNumber.trim().length > 0;
+
+  const availableBalance = stats?.availableBalance ?? 0;
+  const cashoutValue = Number(cashoutAmount);
+  const cashoutIsValid =
+    Number.isFinite(cashoutValue) && cashoutValue > 0 && cashoutValue <= availableBalance;
+
+  const handleCashout = () => {
+    if (!cashoutIsValid) {
+      Alert.alert('Invalid amount', 'Enter a cashout amount within your available balance.');
+      return;
+    }
+
+    setStats((current) =>
+      current
+        ? {
+            ...current,
+            availableBalance: Math.max(0, current.availableBalance - cashoutValue),
+            pendingPayout: (current.pendingPayout ?? 0) + cashoutValue,
+          }
+        : current
+    );
+
+    setCashoutAmount('');
+    setCashoutVisible(false);
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -244,7 +273,10 @@ export default function EarningsScreen() {
               <Ionicons name="save-outline" size={16} color={teal} />
               <Text style={styles.saveButtonText}>Save bank details</Text>
             </Pressable>
-            <Pressable style={[styles.cashoutButton, !canCashout && styles.cashoutButtonDisabled]} disabled={!canCashout}>
+            <Pressable
+              style={[styles.cashoutButton, !canCashout && styles.cashoutButtonDisabled]}
+              disabled={!canCashout}
+              onPress={() => setCashoutVisible(true)}>
               <Ionicons name="wallet-outline" size={16} color="#FFF" />
               <Text style={styles.cashoutButtonText}>Request cashout</Text>
             </Pressable>
@@ -257,6 +289,45 @@ export default function EarningsScreen() {
             </Text>
           </View>
         </View>
+
+        <Modal transparent visible={cashoutVisible} animationType="fade" onRequestClose={() => setCashoutVisible(false)}>
+          <View style={styles.cashoutOverlay}>
+            <View style={styles.cashoutModal}>
+              <View style={styles.cashoutModalHeader}>
+                <Text style={styles.cashoutModalTitle}>Cashout request</Text>
+                <Pressable onPress={() => setCashoutVisible(false)} style={styles.cashoutClose}>
+                  <Ionicons name="close" size={16} color="#617C79" />
+                </Pressable>
+              </View>
+
+              <Text style={styles.cashoutModalSubtitle}>
+                Available balance: {formatLkr(availableBalance)}
+              </Text>
+
+              <Text style={styles.formLabel}>Cashout amount</Text>
+              <TextInput
+                style={styles.formInput}
+                placeholder="2500"
+                placeholderTextColor="#9CB3AF"
+                keyboardType="number-pad"
+                value={cashoutAmount}
+                onChangeText={setCashoutAmount}
+              />
+
+              <View style={styles.cashoutModalActions}>
+                <Pressable style={styles.saveButton} onPress={() => setCashoutVisible(false)}>
+                  <Text style={styles.saveButtonText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.cashoutButton, !cashoutIsValid && styles.cashoutButtonDisabled]}
+                  disabled={!cashoutIsValid}
+                  onPress={handleCashout}>
+                  <Text style={styles.cashoutButtonText}>Confirm cashout</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
         <Text style={styles.sectionTitle}>WEEKLY PERFORMANCE</Text>
 
@@ -699,6 +770,52 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     fontWeight: '600',
+  },
+  cashoutOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(7, 21, 19, 0.45)',
+    paddingHorizontal: 16,
+  },
+  cashoutModal: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+  },
+  cashoutModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  cashoutModalTitle: {
+    color: '#102A28',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  cashoutModalSubtitle: {
+    color: '#617C79',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  cashoutClose: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F0F5F4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cashoutModalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
   },
   chartCard: {
     borderRadius: 16,
