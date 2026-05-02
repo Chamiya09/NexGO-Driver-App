@@ -6,6 +6,7 @@ import {
   StatusBar as RNStatusBar,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -87,6 +88,12 @@ export default function EarningsScreen() {
   const { driver, token } = useDriverAuth();
   const [stats, setStats] = useState<DriverStats | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
+  const [bankDetails, setBankDetails] = useState({
+    bankName: '',
+    accountName: '',
+    accountNumber: '',
+    branch: '',
+  });
   const completedMetrics = stats
     ? [stats.availableBalance > 0, stats.completedRides > 0, stats.reviewCount > 0].filter(Boolean).length
     : 0;
@@ -114,6 +121,11 @@ export default function EarningsScreen() {
       void loadStats();
     }, [loadStats])
   );
+
+  const canCashout =
+    bankDetails.bankName.trim().length > 0 &&
+    bankDetails.accountName.trim().length > 0 &&
+    bankDetails.accountNumber.trim().length > 0;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -168,6 +180,83 @@ export default function EarningsScreen() {
         {earningsCards.map((item) => (
           <EarningsCard key={item.id} item={item} />
         ))}
+
+        <Text style={styles.sectionTitle}>CASHOUT</Text>
+
+        <View style={styles.cashoutCard}>
+          <View style={styles.cashoutHeader}>
+            <View>
+              <Text style={styles.cashoutTitle}>Bank details</Text>
+              <Text style={styles.cashoutSubtitle}>Add a verified account to receive payouts</Text>
+            </View>
+            <View style={styles.cashoutBadge}>
+              <Ionicons name="cash-outline" size={12} color={teal} />
+              <Text style={styles.cashoutBadgeText}>Payout ready</Text>
+            </View>
+          </View>
+
+          <View style={styles.formGrid}>
+            <View style={styles.formField}>
+              <Text style={styles.formLabel}>Bank name</Text>
+              <TextInput
+                style={styles.formInput}
+                placeholder="Commercial Bank"
+                placeholderTextColor="#9CB3AF"
+                value={bankDetails.bankName}
+                onChangeText={(value) => setBankDetails((prev) => ({ ...prev, bankName: value }))}
+              />
+            </View>
+            <View style={styles.formField}>
+              <Text style={styles.formLabel}>Account name</Text>
+              <TextInput
+                style={styles.formInput}
+                placeholder="Driver name"
+                placeholderTextColor="#9CB3AF"
+                value={bankDetails.accountName}
+                onChangeText={(value) => setBankDetails((prev) => ({ ...prev, accountName: value }))}
+              />
+            </View>
+            <View style={styles.formField}>
+              <Text style={styles.formLabel}>Account number</Text>
+              <TextInput
+                style={styles.formInput}
+                placeholder="1234567890"
+                placeholderTextColor="#9CB3AF"
+                keyboardType="number-pad"
+                value={bankDetails.accountNumber}
+                onChangeText={(value) => setBankDetails((prev) => ({ ...prev, accountNumber: value }))}
+              />
+            </View>
+            <View style={styles.formField}>
+              <Text style={styles.formLabel}>Branch (optional)</Text>
+              <TextInput
+                style={styles.formInput}
+                placeholder="Colombo"
+                placeholderTextColor="#9CB3AF"
+                value={bankDetails.branch}
+                onChangeText={(value) => setBankDetails((prev) => ({ ...prev, branch: value }))}
+              />
+            </View>
+          </View>
+
+          <View style={styles.cashoutActions}>
+            <Pressable style={styles.saveButton}>
+              <Ionicons name="save-outline" size={16} color={teal} />
+              <Text style={styles.saveButtonText}>Save bank details</Text>
+            </Pressable>
+            <Pressable style={[styles.cashoutButton, !canCashout && styles.cashoutButtonDisabled]} disabled={!canCashout}>
+              <Ionicons name="wallet-outline" size={16} color="#FFF" />
+              <Text style={styles.cashoutButtonText}>Request cashout</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.cashoutNote}>
+            <Ionicons name="information-circle-outline" size={16} color="#617C79" />
+            <Text style={styles.cashoutNoteText}>
+              Cashouts are processed within 1-2 business days after verification.
+            </Text>
+          </View>
+        </View>
 
         <Text style={styles.sectionTitle}>WEEKLY PERFORMANCE</Text>
 
@@ -488,6 +577,128 @@ const styles = StyleSheet.create({
     color: teal,
     fontSize: 12,
     fontWeight: '800',
+  },
+  cashoutCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#FFFFFF',
+    padding: 14,
+    marginBottom: 12,
+  },
+  cashoutHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 12,
+  },
+  cashoutTitle: {
+    color: '#102A28',
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 3,
+  },
+  cashoutSubtitle: {
+    color: '#617C79',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  cashoutBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#E7F5F3',
+  },
+  cashoutBadgeText: {
+    color: teal,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  formGrid: {
+    gap: 10,
+    marginBottom: 12,
+  },
+  formField: {
+    gap: 6,
+  },
+  formLabel: {
+    color: '#617C79',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  formInput: {
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#F7FBFA',
+    paddingHorizontal: 12,
+    color: '#102A28',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  cashoutActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  saveButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#E7F5F3',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  saveButtonText: {
+    color: teal,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  cashoutButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 12,
+    backgroundColor: teal,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  cashoutButtonDisabled: {
+    backgroundColor: '#5CA39E',
+    opacity: 0.7,
+  },
+  cashoutButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  cashoutNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#F7FBFA',
+    padding: 10,
+  },
+  cashoutNoteText: {
+    flex: 1,
+    color: '#617C79',
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '600',
   },
   chartCard: {
     borderRadius: 16,

@@ -124,7 +124,7 @@ export default function DriverProfileScreen() {
         text: 'Log out',
         style: 'destructive',
         onPress: () => {
-          logout();
+          void logout();
           router.replace('/login');
         },
       },
