@@ -118,21 +118,29 @@ export default function EarningsScreen() {
   const cashoutIsValid =
     Number.isFinite(cashoutValue) && cashoutValue > 0 && cashoutValue <= availableBalance;
 
-  const executeCashout = (amount, onComplete) => {
+  const executeCashout = (amount: number, onComplete: () => void) => {
     if (!Number.isFinite(amount) || amount <= 0 || amount > availableBalance) {
       Alert.alert('Invalid amount', 'Enter a cashout amount within your available balance.');
       return;
     }
 
-    setStats((current) =>
-      current
-        ? {
-            ...current,
-            availableBalance: Math.max(0, current.availableBalance - amount),
-            pendingPayout: (current.pendingPayout ?? 0) + amount,
-          }
-        : current
-    );
+    setStats((current) => {
+      if (!current) return current;
+      
+      const newActivity: DriverActivity = {
+        id: `checkout-${Date.now()}`,
+        status: 'Checkout',
+        amount: -amount,
+        dateLabel: 'Just now',
+      };
+
+      return {
+        ...current,
+        availableBalance: Math.max(0, current.availableBalance - amount),
+        pendingPayout: (current.pendingPayout ?? 0) + amount,
+        recentActivities: [newActivity, ...current.recentActivities].slice(0, 4),
+      };
+    });
 
     onComplete();
   };
@@ -431,7 +439,7 @@ function GuidelineRow({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; te
   );
 }
 
-function getActivityTone(status: DriverActivity['status']) {
+function getActivityTone(status: DriverActivity['status'] | string) {
   if (status === 'Completed') {
     return { text: '#157A62', bg: '#E9F8EF', icon: 'checkmark-circle-outline' as const };
   }
@@ -441,12 +449,16 @@ function getActivityTone(status: DriverActivity['status']) {
   if (status === 'Pending') {
     return { text: '#9A6B00', bg: '#FFF7E0', icon: 'time-outline' as const };
   }
+  if (status === 'Checkout') {
+    return { text: teal, bg: '#E7F5F3', icon: 'wallet-outline' as const };
+  }
 
   return { text: teal, bg: '#E7F5F3', icon: 'navigate-outline' as const };
 }
 
-function formatActivityTitle(status: DriverActivity['status']) {
+function formatActivityTitle(status: DriverActivity['status'] | string) {
   if (status === 'InProgress') return 'Ride in progress';
+  if (status === 'Checkout') return 'Bank checkout';
   return `${status} ride`;
 }
 
