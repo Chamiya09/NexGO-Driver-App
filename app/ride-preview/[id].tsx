@@ -249,9 +249,13 @@ export default function RidePreviewScreen() {
     ? { distance: `${activeRoute.distanceKm} km`, duration: `${activeRoute.durationMin} min` }
     : { distance: '—', duration: '—' };
 
+  const isKycApproved = Boolean(
+    driver?.documents?.length && driver.documents.every((doc) => doc.status === 'approved')
+  );
+
   // ── Accept ────────────────────────────────────────────────────────────────
   const handleAccept = () => {
-    if (!driverSocket.connected || !driver?.id) return;
+    if (!driverSocket.connected || !driver?.id || !isKycApproved) return;
     setAccepting(true);
     driverSocket.emit('acceptRide', { rideId, driverId: driver.id });
     console.log('[RidePreview] acceptRide emitted:', rideId);
@@ -465,9 +469,9 @@ export default function RidePreviewScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.acceptBtn, accepting && styles.acceptBtnDisabled]}
+                style={[styles.acceptBtn, (accepting || !isKycApproved) && styles.acceptBtnDisabled]}
                 onPress={handleAccept}
-                disabled={accepting}>
+                disabled={accepting || !isKycApproved}>
                 {accepting
                   ? <ActivityIndicator color="#FFF" size="small" />
                   : <Ionicons name="checkmark-circle-outline" size={20} color="#FFF" />}
@@ -476,6 +480,11 @@ export default function RidePreviewScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
+            {!isKycApproved && (
+              <Text style={styles.kycNote}>
+                Upload and get approval for license, insurance, and registration to accept rides.
+              </Text>
+            )}
           </>
         )}
       </View>
@@ -655,6 +664,13 @@ const styles = StyleSheet.create({
   },
   acceptBtnDisabled: { backgroundColor: '#4A9A98' },
   acceptBtnText: { fontSize: 15, fontWeight: '900', color: '#FFFFFF' },
+  kycNote: {
+    marginTop: 10,
+    color: '#C2410C',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
   loadingWrap: { alignItems: 'center', paddingVertical: 40 },
   loadingText: { marginTop: 10, fontWeight: '700', color: teal },
 });
