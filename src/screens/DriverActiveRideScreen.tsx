@@ -208,6 +208,7 @@ export default function DriverActiveRideScreen() {
   const [requestedArrivalCode, setRequestedArrivalCode] = useState('');
   const [arrivalCodeError, setArrivalCodeError] = useState('');
   const [tripCompletedVisible, setTripCompletedVisible] = useState(false);
+  const [isColspan, setIsColspan] = useState(false);
   const navigationRouteOriginRef = useRef<LatLng>(initialDriverPosition);
   const hasNavigationOsrmRouteRef = useRef(false);
   const navigationRouteRequestIdRef = useRef(0);
@@ -747,7 +748,13 @@ export default function DriverActiveRideScreen() {
       </SafeAreaView>
 
       <View style={styles.sheet}>
-        <View style={styles.sheetHandle} />
+        <Pressable
+          style={styles.sheetHandlePressable}
+          onPress={() => setIsColspan((value) => !value)}
+          accessibilityRole="button"
+          accessibilityLabel={isColspan ? 'Show full details layout' : 'Show passenger only layout'}>
+          <View style={styles.sheetHandle} />
+        </Pressable>
         <View style={styles.sheetTopRow}>
           <Pressable
             style={[styles.rotationButton, isRotationEnabled ? styles.rotationButtonActive : styles.rotationButtonInactive]}
@@ -768,7 +775,7 @@ export default function DriverActiveRideScreen() {
           </View>
         ) : (
           <>
-            {stage === 'TO_PICKUP' ? (
+            {isColspan || stage === 'TO_PICKUP' ? (
               <>
                 <View style={styles.passengerHeaderRow}>
                   <View style={styles.passengerAvatar}>
@@ -780,10 +787,6 @@ export default function DriverActiveRideScreen() {
                   </View>
                   <Text style={[styles.sheetTitle, styles.sheetTitleInline]}>{passengerName}</Text>
                 </View>
-                <View style={styles.ratingRow}>
-                  <Ionicons name="star" size={16} color="#D79A00" />
-                  <Text style={styles.ratingText}>{passengerRating} Passenger Rating</Text>
-                </View>
               </>
             ) : (
               <>
@@ -792,19 +795,21 @@ export default function DriverActiveRideScreen() {
               </>
             )}
 
-            <View style={styles.driverDetailsCard}>
-              <View style={styles.driverDetailsIcon}>
-                <Ionicons name="car-sport-outline" size={18} color={TEAL} />
+            {!isColspan && (
+              <View style={styles.driverDetailsCard}>
+                <View style={styles.driverDetailsIcon}>
+                  <Ionicons name="car-sport-outline" size={18} color={TEAL} />
+                </View>
+                <View style={styles.driverDetailsText}>
+                  <Text style={styles.driverDetailsTitle}>{driver?.fullName || 'Driver profile'}</Text>
+                  <Text style={styles.driverDetailsMeta} numberOfLines={1}>{formatDriverVehicle(driver)}</Text>
+                </View>
+                <View style={styles.driverPlatePill}>
+                  <Text style={styles.driverPlateLabel}>PLATE</Text>
+                  <Text style={styles.driverPlateText}>{driver?.vehicle?.plateNumber || 'N/A'}</Text>
+                </View>
               </View>
-              <View style={styles.driverDetailsText}>
-                <Text style={styles.driverDetailsTitle}>{driver?.fullName || 'Driver profile'}</Text>
-                <Text style={styles.driverDetailsMeta} numberOfLines={1}>{formatDriverVehicle(driver)}</Text>
-              </View>
-              <View style={styles.driverPlatePill}>
-                <Text style={styles.driverPlateLabel}>PLATE</Text>
-                <Text style={styles.driverPlateText}>{driver?.vehicle?.plateNumber || 'N/A'}</Text>
-              </View>
-            </View>
+            )}
 
             <Pressable
               onPress={actionButton.onPress}
@@ -959,7 +964,12 @@ const styles = StyleSheet.create({
   sheetTopRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 8,
     marginBottom: 8,
+  },
+  sheetHandlePressable: {
+    alignSelf: 'center',
   },
   rotationButtonActive: {
     backgroundColor: TEAL,
@@ -979,6 +989,7 @@ const styles = StyleSheet.create({
   rotationButtonTextInactive: {
     color: TEAL,
   },
+  
 
   markerBubble: {
     width: 46,
