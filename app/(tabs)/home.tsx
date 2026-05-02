@@ -17,6 +17,7 @@ import { useDriverAuth } from '@/context/driver-auth-context';
 import { useNotifications } from '@/context/notifications-context';
 import driverSocket from '@/lib/driverSocket';
 import { MAP_TILE_URL_TEMPLATE } from '@/lib/mapTiles';
+import { fetchDriverStats, formatLkr, formatRating, type DriverStats } from '@/lib/driver-stats';
 import {
   NotificationAlert,
   NotificationAlertRef,
@@ -44,7 +45,7 @@ type PassengerPin = {
 };
 
 export default function DriverHomeScreen() {
-  const { driver } = useDriverAuth();
+  const { driver, token } = useDriverAuth();
   const router = useRouter();
   const { addNotification, removeNotification, clearAll } = useNotifications();
   const mapRef = useRef<MapView>(null);
@@ -53,6 +54,7 @@ export default function DriverHomeScreen() {
   const [isOnline, setIsOnline] = useState(false);
   const [socketOk, setSocketOk] = useState(driverSocket.connected);
   const [passengerPins, setPassengerPins] = useState<PassengerPin[]>([]);
+  const [driverStats, setDriverStats] = useState<DriverStats | null>(null);
   const isOnlineRef = useRef(false);
   const driverCoordsRef = useRef<{ latitude: number; longitude: number } | null>(null);
   const hydratedOnlineRef = useRef(false);
@@ -70,6 +72,30 @@ export default function DriverHomeScreen() {
     isOnlineRef.current = driver.isOnline;
     setIsOnline(driver.isOnline);
   }, [driver?.isOnline]);
+
+  useEffect(() => {
+    if (!token) {
+      setDriverStats(null);
+      return;
+    }
+
+    let mounted = true;
+    fetchDriverStats(token)
+      .then((stats) => {
+        if (mounted) {
+          setDriverStats(stats);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setDriverStats(null);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [token]);
 
   // ── Setup Location ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -354,7 +380,7 @@ export default function DriverHomeScreen() {
         {/* Top bar */}
         <View style={styles.topBar}>
           <View style={styles.topBarLeft}>
-            <Text style={styles.greeting}>NexGO Driver</Text>
+            <Text style={styles.greeting}>{driver?.fullName || 'NexGO Driver'}</Text>
             <View style={styles.subRow}>
               <View style={[styles.connDot, socketOk ? styles.connDotOn : styles.connDotOff]} />
               <Text style={styles.subtext}>
@@ -409,9 +435,9 @@ export default function DriverHomeScreen() {
         </View>
 
         <View style={styles.metricRow}>
-          <MetricTile icon="cash-outline" value="LKR 8,420" label="Earnings" />
-          <MetricTile icon="checkmark-done-outline" value="12" label="Rides Done" />
-          <MetricTile icon="star-outline" value="4.9" label="Rating" />
+          <MetricTile icon="cash-outline" value={formatLkr(driverStats?.todayEarnings ?? 0)} label="Today" />
+          <MetricTile icon="checkmark-done-outline" value={String(driverStats?.completedRides ?? 0)} label="Rides Done" />
+          <MetricTile icon="star-outline" value={formatRating(driverStats?.averageRating ?? null)} label="Rating" />
         </View>
       </View>
     </View>

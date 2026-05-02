@@ -21,7 +21,7 @@ import * as Location from 'expo-location';
 import MapView, { Marker, Polyline, UrlTile, AnimatedRegion } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import driverSocket from '@/lib/driverSocket';
-import { useDriverAuth } from '@/context/driver-auth-context';
+import { type DriverProfile, useDriverAuth } from '@/context/driver-auth-context';
 import { MAP_TILE_URL_TEMPLATE } from '@/lib/mapTiles';
 import { clearDriverActiveRide, saveDriverActiveRide } from '@/lib/activeRideStorage';
 import {
@@ -791,6 +791,20 @@ export default function DriverActiveRideScreen() {
               </>
             )}
 
+            <View style={styles.driverDetailsCard}>
+              <View style={styles.driverDetailsIcon}>
+                <Ionicons name="car-sport-outline" size={18} color={TEAL} />
+              </View>
+              <View style={styles.driverDetailsText}>
+                <Text style={styles.driverDetailsTitle}>{driver?.fullName || 'Driver profile'}</Text>
+                <Text style={styles.driverDetailsMeta} numberOfLines={1}>{formatDriverVehicle(driver)}</Text>
+              </View>
+              <View style={styles.driverPlatePill}>
+                <Text style={styles.driverPlateLabel}>PLATE</Text>
+                <Text style={styles.driverPlateText}>{driver?.vehicle?.plateNumber || 'N/A'}</Text>
+              </View>
+            </View>
+
             <Pressable
               onPress={actionButton.onPress}
               style={[styles.primaryAction, { backgroundColor: actionButton.color }]}
@@ -899,6 +913,14 @@ export default function DriverActiveRideScreen() {
       </Modal>
     </View>
   );
+}
+
+function formatDriverVehicle(driver?: DriverProfile | null) {
+  const vehicle = driver?.vehicle;
+  if (!vehicle) return 'Vehicle not added';
+
+  const parts = [vehicle.color, vehicle.make, vehicle.model].filter(Boolean);
+  return parts.length ? parts.join(' ') : vehicle.category;
 }
 
 const styles = StyleSheet.create({
@@ -1034,6 +1056,41 @@ const styles = StyleSheet.create({
   passengerAvatarText: { color: TEAL, fontSize: 19, fontWeight: '900' },
   ratingRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 6 },
   ratingText: { color: '#406866', fontWeight: '700' },
+  driverDetailsCard: {
+    minHeight: 62,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#F7FBFA',
+    padding: 10,
+    marginTop: 14,
+    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  driverDetailsIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#E7F5F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  driverDetailsText: { flex: 1, minWidth: 0 },
+  driverDetailsTitle: { color: '#0D302F', fontSize: 14, fontWeight: '900' },
+  driverDetailsMeta: { color: '#5D7F7D', fontSize: 12, fontWeight: '700', marginTop: 2 },
+  driverPlatePill: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#CFE6E3',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+  driverPlateLabel: { color: '#8CA1A0', fontSize: 8, fontWeight: '900' },
+  driverPlateText: { color: TEAL, fontSize: 11, fontWeight: '900', marginTop: 1 },
   primaryAction: {
     marginTop: 18,
     borderRadius: 24,

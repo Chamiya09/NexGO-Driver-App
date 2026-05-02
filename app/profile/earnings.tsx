@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -9,10 +9,12 @@ import {
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import RefreshableScrollView from '@/components/RefreshableScrollView';
+import { useDriverAuth } from '@/context/driver-auth-context';
+import { fetchDriverStats, formatLkr, type DriverStats } from '@/lib/driver-stats';
 
 const teal = '#008080';
 
@@ -49,46 +51,77 @@ const statusMeta = {
   },
 };
 
-const earningsCards: EarningsCardItem[] = [
-  {
-    id: 'available',
-    title: 'Available Balance',
-    subtitle: 'Ready to cash out from completed rides',
-    icon: 'wallet-outline',
-    value: 'LKR 24,650',
-    updatedAt: 'Updated today',
-    status: 'ready',
-  },
-  {
-    id: 'pending',
-    title: 'Pending Payout',
-    subtitle: 'Trips completed but waiting for settlement',
-    icon: 'hourglass-outline',
-    value: 'LKR 8,420',
-    updatedAt: 'Includes this week',
-    status: 'processing',
-  },
-  {
-    id: 'next',
-    title: 'Next Settlement',
-    subtitle: 'Scheduled bank transfer window',
-    icon: 'business-outline',
-    value: 'Friday, 6:00 PM',
-    updatedAt: 'Bank transfer',
-    status: 'scheduled',
-  },
-];
-
-const chartBars = [42, 68, 54, 88, 72, 96, 62];
+function buildEarningsCards(stats: DriverStats | null): EarningsCardItem[] {
+  return [
+    {
+      id: 'available',
+      title: 'Available Balance',
+      subtitle: 'Completed ride income in your driver account',
+      icon: 'wallet-outline',
+      value: formatLkr(stats?.availableBalance ?? 0),
+      updatedAt: stats ? `${stats.completedRides} completed rides` : 'Loading ride data',
+      status: 'ready',
+    },
+    {
+      id: 'pending',
+      title: 'Pending Payout',
+      subtitle: 'Accepted or in-progress ride value',
+      icon: 'hourglass-outline',
+      value: formatLkr(stats?.pendingPayout ?? 0),
+      updatedAt: stats ? `${stats.activeRides} active rides` : 'Loading ride data',
+      status: 'processing',
+    },
+    {
+      id: 'next',
+      title: 'Next Settlement',
+      subtitle: 'Scheduled bank transfer window',
+      icon: 'business-outline',
+      value: stats?.nextSettlementLabel ?? 'Loading...',
+      updatedAt: 'Bank transfer',
+      status: 'scheduled',
+    },
+  ];
+}
 
 export default function EarningsScreen() {
-  const completedMetrics = 2;
+  const { driver, token } = useDriverAuth();
+  const [stats, setStats] = useState<DriverStats | null>(null);
+  const [errorMessage, setErrorMessage] = useState('');
+  const completedMetrics = stats
+    ? [stats.availableBalance > 0, stats.completedRides > 0, stats.reviewCount > 0].filter(Boolean).length
+    : 0;
   const totalMetrics = 3;
+  const earningsCards = buildEarningsCards(stats);
+  const maxWeeklyEarning = Math.max(...(stats?.weeklyEarnings ?? [0]), 0);
+  const chartBars = (stats?.weeklyEarnings ?? Array.from({ length: 7 }, () => 0)).map((value) =>
+    maxWeeklyEarning > 0 ? Math.max(20, Math.round((value / maxWeeklyEarning) * 96)) : 20
+  );
+
+  const loadStats = useCallback(async () => {
+    if (!token) return;
+
+    try {
+      setErrorMessage('');
+      const nextStats = await fetchDriverStats(token);
+      setStats(nextStats);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to load driver earnings.');
+    }
+  }, [token]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadStats();
+    }, [loadStats])
+  );
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
-      <RefreshableScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <RefreshableScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+        onRefreshPage={loadStats}>
         <View style={styles.topBar}>
           <Pressable style={styles.backButton} onPress={() => router.back()}>
             <Ionicons name="chevron-back" size={22} color="#102A28" />
@@ -104,7 +137,7 @@ export default function EarningsScreen() {
             </View>
 
             <View style={styles.heroIdentity}>
-              <Text style={styles.heroName}>Manage earnings</Text>
+              <Text style={styles.heroName}>{driver?.fullName || 'Driver'} earnings</Text>
               <Text style={styles.heroSubline}>
                 {completedMetrics} of {totalMetrics} payout checkpoints ready
               </Text>
@@ -117,13 +150,20 @@ export default function EarningsScreen() {
 
           <View style={styles.heroBadge}>
             <Ionicons name="trending-up-outline" size={15} color={teal} />
-            <Text style={styles.heroBadgeText}>Manage earnings</Text>
+            <Text style={styles.heroBadgeText}>{driver?.status || 'Driver account'}</Text>
           </View>
 
           <Text style={styles.heroHint}>Track your wallet, payout timing, and recent driver performance in one place.</Text>
         </View>
 
         <Text style={styles.sectionTitle}>EARNING SUMMARY</Text>
+
+        {errorMessage ? (
+          <View style={styles.errorCard}>
+            <Ionicons name="alert-circle-outline" size={18} color="#C13B3B" />
+            <Text style={styles.errorText}>{errorMessage}</Text>
+          </View>
+        ) : null}
 
         {earningsCards.map((item) => (
           <EarningsCard key={item.id} item={item} />
@@ -138,8 +178,8 @@ export default function EarningsScreen() {
               <Text style={styles.chartSubtitle}>Ride income and online activity snapshot</Text>
             </View>
             <View style={styles.growthPill}>
-              <Ionicons name="arrow-up" size={12} color="#157A62" />
-              <Text style={styles.growthPillText}>18%</Text>
+              <Ionicons name="cash-outline" size={12} color="#157A62" />
+              <Text style={styles.growthPillText}>{formatLkr(stats?.todayEarnings ?? 0)}</Text>
             </View>
           </View>
 
@@ -333,6 +373,25 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     marginBottom: 6,
     marginTop: 2,
+  },
+  errorCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F0C6C6',
+    backgroundColor: '#FFF4F4',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  errorText: {
+    flex: 1,
+    color: '#C13B3B',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
   },
   documentCard: {
     borderRadius: 16,

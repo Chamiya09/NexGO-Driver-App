@@ -13,7 +13,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
 import { Feather, Ionicons } from '@expo/vector-icons';
-import { useDriverAuth } from '@/context/driver-auth-context';
+import { type DriverProfile, useDriverAuth } from '@/context/driver-auth-context';
 import { useNotifications } from '@/context/notifications-context';
 import driverSocket from '@/lib/driverSocket';
 import { MAP_TILE_URL_TEMPLATE } from '@/lib/mapTiles';
@@ -66,6 +66,14 @@ function fitRoute(map: MapView | null, route: RouteState, animated = true, delay
   if (delayMs > 0) setTimeout(fit, delayMs);
   else fit();
 }
+function formatDriverVehicle(driver?: DriverProfile | null) {
+  const vehicle = driver?.vehicle;
+  if (!vehicle) return 'Vehicle not added';
+
+  const parts = [vehicle.color, vehicle.make, vehicle.model].filter(Boolean);
+  return parts.length ? parts.join(' ') : vehicle.category;
+}
+
 type MapMode = 'navigate' | 'trip';  // navigate = driver→pickup | trip = pickup→dropoff
 
 // ── OSRM route fetcher ────────────────────────────────────────────────────────
@@ -418,6 +426,20 @@ export default function RidePreviewScreen() {
               />
             </View>
 
+            <View style={styles.driverDetailsCard}>
+              <View style={styles.driverDetailsIcon}>
+                <Ionicons name="car-sport-outline" size={18} color={teal} />
+              </View>
+              <View style={styles.driverDetailsText}>
+                <Text style={styles.driverDetailsTitle}>{driver?.fullName || 'Driver profile'}</Text>
+                <Text style={styles.driverDetailsMeta} numberOfLines={1}>{formatDriverVehicle(driver)}</Text>
+              </View>
+              <View style={styles.driverPlatePill}>
+                <Text style={styles.driverPlateLabel}>PLATE</Text>
+                <Text style={styles.driverPlateText}>{driver?.vehicle?.plateNumber || 'N/A'}</Text>
+              </View>
+            </View>
+
             {/* Route summary */}
             <View style={styles.routeBlock}>
               {mapMode === 'navigate' ? (
@@ -579,6 +601,40 @@ const styles = StyleSheet.create({
   passengerAvatarImage: { width: '100%', height: '100%' },
   passengerAvatarText: { color: teal, fontSize: 17, fontWeight: '900' },
   statsRow:     { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  driverDetailsCard: {
+    minHeight: 62,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#F7FBFA',
+    padding: 10,
+    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  driverDetailsIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#E7F5F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  driverDetailsText: { flex: 1, minWidth: 0 },
+  driverDetailsTitle: { color: '#102A28', fontSize: 14, fontWeight: '900' },
+  driverDetailsMeta: { color: '#617C79', fontSize: 12, fontWeight: '700', marginTop: 2 },
+  driverPlatePill: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#CFE6E3',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+  driverPlateLabel: { color: '#8CA1A0', fontSize: 8, fontWeight: '900' },
+  driverPlateText: { color: teal, fontSize: 11, fontWeight: '900', marginTop: 1 },
   routeBlock: {
     backgroundColor: '#F7FBFA', borderRadius: 16,
     borderWidth: 1, borderColor: '#D9E9E6',
