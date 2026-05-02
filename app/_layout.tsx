@@ -2,10 +2,10 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState, type PropsWithChildren } from 'react';
-import { Keyboard, View } from 'react-native';
+import { Keyboard, Modal, StyleSheet, Text, View } from 'react-native';
 import 'react-native-reanimated';
 
-import { DriverAuthProvider } from '@/context/driver-auth-context';
+import { DriverAuthProvider, useDriverAuth } from '@/context/driver-auth-context';
 import { NotificationsProvider } from '@/context/notifications-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -54,6 +54,7 @@ export default function RootLayout() {
               <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
               <Stack.Screen name="ride-preview/[id]" />
             </Stack>
+            <SuspendedOverlay />
             <StatusBar style="auto" />
           </KeyboardDismissView>
         </NotificationsProvider>
@@ -61,3 +62,56 @@ export default function RootLayout() {
     </ThemeProvider>
   );
 }
+
+  function SuspendedOverlay() {
+    const { driver, loading } = useDriverAuth();
+
+    if (loading || driver?.status !== 'suspended') {
+      return null;
+    }
+
+    return (
+      <Modal transparent visible animationType="fade">
+        <View style={styles.suspendedOverlay}>
+          <View style={styles.suspendedCard}>
+            <Text style={styles.suspendedTitle}>Account Suspended</Text>
+            <Text style={styles.suspendedText}>
+              Your driver account is suspended. Please contact NexGO support for help.
+            </Text>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
+
+  const styles = StyleSheet.create({
+    suspendedOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(7, 21, 19, 0.65)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 18,
+    },
+    suspendedCard: {
+      width: '100%',
+      maxWidth: 420,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: '#D9E9E6',
+      backgroundColor: '#FFFFFF',
+      padding: 18,
+      alignItems: 'center',
+    },
+    suspendedTitle: {
+      fontSize: 18,
+      fontWeight: '800',
+      color: '#102A28',
+      marginBottom: 6,
+    },
+    suspendedText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: '#617C79',
+      textAlign: 'center',
+    },
+  });
