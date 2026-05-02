@@ -4,6 +4,7 @@ type DriverRide = {
   id: string;
   status: string;
   price?: number;
+  driverEarnings?: number;
   requestedAt?: string;
   completedAt?: string | null;
 };
@@ -112,14 +113,14 @@ export async function fetchDriverStats(token: string): Promise<DriverStats> {
     .map((ride) => ({
       id: ride.id,
       status: ride.status,
-      amount: Number(ride.price) || 0,
+      amount: Number(ride.driverEarnings ?? (ride.price ? ride.price * 0.95 : 0)) || 0,
       dateLabel: formatActivityDate(getRideDate(ride)),
     }));
 
   completedRides.forEach((ride) => {
     const rideDate = getRideDate(ride);
     if (!rideDate) return;
-    weeklyEarnings[rideDate.getDay()] += Number(ride.price) || 0;
+    weeklyEarnings[rideDate.getDay()] += Number(ride.driverEarnings ?? (ride.price ? ride.price * 0.95 : 0)) || 0;
   });
 
   return {
@@ -131,9 +132,9 @@ export async function fetchDriverStats(token: string): Promise<DriverStats> {
         const rideDate = getRideDate(ride);
         return rideDate ? isSameLocalDay(rideDate, now) : false;
       })
-      .reduce((sum, ride) => sum + (Number(ride.price) || 0), 0),
-    availableBalance: Math.max(0, completedRides.reduce((sum, ride) => sum + (Number(ride.price) || 0), 0) - (sessionData.driver?.totalCashedOut || 0)),
-    pendingPayout: activeRides.reduce((sum, ride) => sum + (Number(ride.price) || 0), 0),
+      .reduce((sum, ride) => sum + (Number(ride.driverEarnings ?? (ride.price ? ride.price * 0.95 : 0)) || 0), 0),
+    availableBalance: Math.max(0, completedRides.reduce((sum, ride) => sum + (Number(ride.driverEarnings ?? (ride.price ? ride.price * 0.95 : 0)) || 0), 0) - (sessionData.driver?.totalCashedOut || 0)),
+    pendingPayout: activeRides.reduce((sum, ride) => sum + (Number(ride.driverEarnings ?? (ride.price ? ride.price * 0.95 : 0)) || 0), 0),
     averageRating: ratings.length
       ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
       : null,
