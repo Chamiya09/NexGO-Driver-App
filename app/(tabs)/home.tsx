@@ -34,6 +34,7 @@ const teal = '#008080';
 type PassengerPin = {
   rideId: string;
   passengerName: string;
+  passengerImage?: string;
   vehicleType: string;
   price: number;
   pickup: RideNotificationData['pickup'];
@@ -160,6 +161,7 @@ export default function DriverHomeScreen() {
         rideId: rideData.rideId,
         passengerId: rideData.passengerId,
         passengerName: rideData.passengerName,
+        passengerImage: rideData.passengerImage,
         vehicleType: rideData.vehicleType,
         price: rideData.price,
         pickup: rideData.pickup,
@@ -175,6 +177,7 @@ export default function DriverHomeScreen() {
           {
             rideId: rideData.rideId,
             passengerName: rideData.passengerName,
+            passengerImage: rideData.passengerImage,
             vehicleType: rideData.vehicleType,
             price: rideData.price,
             pickup: rideData.pickup,
@@ -240,6 +243,7 @@ export default function DriverHomeScreen() {
       params: {
         id: data.rideId,
         passengerName: data.passengerName,
+        passengerImage: data.passengerImage ?? '',
         vehicleType: data.vehicleType,
         price: String(data.price),
         pLat: String(data.pickup.latitude),
@@ -309,6 +313,7 @@ export default function DriverHomeScreen() {
                   params: {
                     id: pin.rideId,
                     passengerName: pin.passengerName,
+                    passengerImage: pin.passengerImage ?? '',
                     vehicleType: pin.vehicleType,
                     price: String(pin.price),
                     pLat: String(pin.pickup.latitude),

@@ -73,6 +73,7 @@ type RideParams = {
   id?: string;
   status?: string;
   passengerName?: string;
+  passengerImage?: string;
   passengerRating?: string;
   vehicleType?: string;
   price?: string;
@@ -157,6 +158,7 @@ export default function DriverActiveRideScreen() {
 
   const rideId = params.id ?? '';
   const passengerName = params.passengerName ?? 'Passenger';
+  const passengerImage = params.passengerImage ?? '';
   const passengerRating = params.passengerRating ?? '4.9';
   const pickupName = params.pName ?? 'Pickup point';
   const dropoffName = params.dName ?? 'Destination';
@@ -227,6 +229,7 @@ export default function DriverActiveRideScreen() {
       id: rideId,
       status: actionStatusToParam(actionStatus),
       passengerName,
+      passengerImage,
       passengerRating,
       vehicleType: params.vehicleType ?? '',
       price: params.price ?? '',
@@ -254,6 +257,7 @@ export default function DriverActiveRideScreen() {
     initialDriverPosition.longitude,
     params.price,
     params.vehicleType,
+    passengerImage,
     passengerName,
     passengerRating,
     pickup.latitude,
@@ -765,7 +769,16 @@ export default function DriverActiveRideScreen() {
           <>
             {stage === 'TO_PICKUP' ? (
               <>
-                <Text style={styles.sheetTitle}>{passengerName}</Text>
+                <View style={styles.passengerHeaderRow}>
+                  <View style={styles.passengerAvatar}>
+                    {passengerImage ? (
+                      <Image source={{ uri: passengerImage }} style={styles.passengerAvatarImage} />
+                    ) : (
+                      <Text style={styles.passengerAvatarText}>{passengerName.trim().charAt(0).toUpperCase() || 'P'}</Text>
+                    )}
+                  </View>
+                  <Text style={[styles.sheetTitle, styles.sheetTitleInline]}>{passengerName}</Text>
+                </View>
                 <View style={styles.ratingRow}>
                   <Ionicons name="star" size={16} color="#D79A00" />
                   <Text style={styles.ratingText}>{passengerRating} Passenger Rating</Text>
@@ -1004,6 +1017,21 @@ const styles = StyleSheet.create({
   },
   sheetSubtitle: { color: '#5D7F7D', fontSize: 13, fontWeight: '700' },
   sheetTitle: { color: '#0D302F', fontSize: 27, fontWeight: '900', marginTop: 6 },
+  sheetTitleInline: { flex: 1, marginTop: 0 },
+  passengerHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 11, marginTop: 6 },
+  passengerAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#E7F5F3',
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  passengerAvatarImage: { width: '100%', height: '100%' },
+  passengerAvatarText: { color: TEAL, fontSize: 19, fontWeight: '900' },
   ratingRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 6 },
   ratingText: { color: '#406866', fontWeight: '700' },
   primaryAction: {

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -19,6 +20,8 @@ import { Ionicons } from '@expo/vector-icons';
 
 import RefreshableScrollView from '@/components/RefreshableScrollView';
 import { useDriverAuth } from '@/context/driver-auth-context';
+import { pickDriverImage } from '@/src/utils/documentPicker';
+import { uploadFileToCloudinary } from '@/src/utils/fileUpload';
 
 const teal = '#008080';
 
@@ -27,6 +30,7 @@ const emptyDriverDetails = {
   email: '',
   phoneNumber: '',
   emergencyContact: '',
+  profileImageUrl: '',
 };
 
 type DriverDetailsField = keyof typeof emptyDriverDetails;
@@ -38,10 +42,13 @@ export default function DriverPersonalDetailsScreen() {
     email: driver?.email || emptyDriverDetails.email,
     phoneNumber: driver?.phoneNumber || emptyDriverDetails.phoneNumber,
     emergencyContact: driver?.emergencyContact || emptyDriverDetails.emergencyContact,
-  }), [driver?.email, driver?.emergencyContact, driver?.fullName, driver?.phoneNumber]);
+    profileImageUrl: driver?.profileImageUrl || emptyDriverDetails.profileImageUrl,
+  }), [driver?.email, driver?.emergencyContact, driver?.fullName, driver?.phoneNumber, driver?.profileImageUrl]);
   const [details, setDetails] = useState(driverDetails);
   const [form, setForm] = useState(driverDetails);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -65,6 +72,10 @@ export default function DriverPersonalDetailsScreen() {
   };
 
   const closeEditModal = () => {
+    if (saving || uploadingImage) {
+      return;
+    }
+
     setIsEditModalVisible(false);
   };
 
@@ -80,6 +91,7 @@ export default function DriverPersonalDetailsScreen() {
     const email = form.email.trim();
     const phoneNumber = form.phoneNumber.trim();
     const emergencyContact = form.emergencyContact.trim();
+    const profileImageUrl = form.profileImageUrl.trim();
 
     if (!fullName || !email || !phoneNumber || !emergencyContact) {
       setErrorMessage('All driver personal detail fields are required.');
@@ -91,23 +103,49 @@ export default function DriverPersonalDetailsScreen() {
       return;
     }
 
+    setSaving(true);
+
     try {
       await updateProfile({
         fullName,
         email: email.toLowerCase(),
         phoneNumber,
         emergencyContact,
+        profileImageUrl,
       });
       setDetails({
         fullName,
         email: email.toLowerCase(),
         phoneNumber,
         emergencyContact,
+        profileImageUrl,
       });
       setIsEditModalVisible(false);
       setSuccessMessage('Driver personal details updated.');
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to update driver personal details.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handlePickProfileImage = async () => {
+    setUploadingImage(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      const pickedImage = await pickDriverImage();
+      if (!pickedImage) {
+        return;
+      }
+
+      const uploadedUrl = await uploadFileToCloudinary(pickedImage);
+      handleChange('profileImageUrl', uploadedUrl);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to upload profile image.');
+    } finally {
+      setUploadingImage(false);
     }
   };
 
@@ -138,7 +176,11 @@ export default function DriverPersonalDetailsScreen() {
           <View style={styles.heroCard}>
             <View style={styles.heroTopRow}>
               <View style={styles.heroAvatar}>
-                <Text style={styles.heroAvatarInitials}>{initials || 'D'}</Text>
+                {details.profileImageUrl ? (
+                  <Image source={{ uri: details.profileImageUrl }} style={styles.avatarImage} />
+                ) : (
+                  <Text style={styles.heroAvatarInitials}>{initials || 'D'}</Text>
+                )}
               </View>
 
               <View style={styles.heroIdentity}>
@@ -224,15 +266,31 @@ export default function DriverPersonalDetailsScreen() {
                 {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
                 <View style={styles.modalAvatar}>
-                  <Text style={styles.modalAvatarInitials}>
-                    {form.fullName
-                      .split(' ')
-                      .filter(Boolean)
-                      .slice(0, 2)
-                      .map((part) => part[0]?.toUpperCase() || '')
-                      .join('') || 'D'}
-                  </Text>
+                  {form.profileImageUrl ? (
+                    <Image source={{ uri: form.profileImageUrl }} style={styles.avatarImage} />
+                  ) : (
+                    <Text style={styles.modalAvatarInitials}>
+                      {form.fullName
+                        .split(' ')
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .map((part) => part[0]?.toUpperCase() || '')
+                        .join('') || 'D'}
+                    </Text>
+                  )}
                 </View>
+
+                <Pressable
+                  style={styles.imageSelectButton}
+                  onPress={() => {
+                    void handlePickProfileImage();
+                  }}
+                  disabled={saving || uploadingImage}>
+                  <Ionicons name="image-outline" size={17} color={teal} />
+                  <Text style={styles.imageSelectButtonText}>
+                    {uploadingImage ? 'Uploading...' : form.profileImageUrl ? 'Change Profile Image' : 'Choose From Gallery'}
+                  </Text>
+                </Pressable>
 
                 <FormInput label="Full name" value={form.fullName} onChangeText={(value) => handleChange('fullName', value)} />
                 <FormInput
@@ -255,12 +313,12 @@ export default function DriverPersonalDetailsScreen() {
                 />
 
                 <View style={styles.modalActions}>
-                  <Pressable style={styles.secondaryButton} onPress={closeEditModal}>
+                  <Pressable style={styles.secondaryButton} onPress={closeEditModal} disabled={saving || uploadingImage}>
                     <Text style={styles.secondaryButtonText}>Cancel</Text>
                   </Pressable>
 
-                  <Pressable style={styles.primaryButton} onPress={handleSave}>
-                    <Text style={styles.primaryButtonText}>Update Details</Text>
+                  <Pressable style={[styles.primaryButton, saving ? styles.buttonDisabled : null]} onPress={handleSave} disabled={saving || uploadingImage}>
+                    <Text style={styles.primaryButtonText}>{saving ? 'Saving...' : 'Update Details'}</Text>
                   </Pressable>
                 </View>
               </View>
@@ -375,6 +433,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#E7F5F3',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   heroAvatarInitials: {
     color: teal,
@@ -613,11 +676,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignSelf: 'center',
     marginBottom: 12,
+    overflow: 'hidden',
   },
   modalAvatarInitials: {
     color: teal,
     fontSize: 22,
     fontWeight: '800',
+  },
+  imageSelectButton: {
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#E7F5F3',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  imageSelectButtonText: {
+    color: teal,
+    fontSize: 13,
+    fontWeight: '900',
   },
   inputGroup: {
     marginBottom: 10,
@@ -665,6 +746,9 @@ const styles = StyleSheet.create({
     backgroundColor: teal,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
   primaryButtonText: {
     color: '#FFFFFF',

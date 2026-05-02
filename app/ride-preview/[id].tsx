@@ -6,6 +6,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -99,6 +100,7 @@ export default function RidePreviewScreen() {
   const params = useLocalSearchParams<{
     id: string;
     passengerName: string;
+    passengerImage?: string;
     vehicleType: string;
     price: string;
     pLat: string; pLng: string; pName: string;
@@ -109,6 +111,7 @@ export default function RidePreviewScreen() {
 
   const rideId       = params.id;
   const passengerName = params.passengerName ?? 'Passenger';
+  const passengerImage = params.passengerImage ?? '';
   const vehicleType  = params.vehicleType   ?? 'Ride';
   const price        = Number(params.price  ?? 0);
 
@@ -251,6 +254,7 @@ export default function RidePreviewScreen() {
       params: {
         id: rideId,
         passengerName,
+        passengerImage,
         vehicleType,
         price: String(price),
         pLat: String(pickup.latitude), pLng: String(pickup.longitude), pName,
@@ -390,7 +394,16 @@ export default function RidePreviewScreen() {
             <Text style={styles.sheetEyebrow}>
               {mapMode === 'navigate' ? '🧭 NAVIGATE TO PASSENGER' : '🚗 RIDE ROUTE PREVIEW'}
             </Text>
-            <Text style={styles.sheetTitle}>{vehicleType} · {passengerName}</Text>
+            <View style={styles.passengerHeaderRow}>
+              <View style={styles.passengerAvatar}>
+                {passengerImage ? (
+                  <Image source={{ uri: passengerImage }} style={styles.passengerAvatarImage} />
+                ) : (
+                  <Text style={styles.passengerAvatarText}>{passengerName.trim().charAt(0).toUpperCase() || 'P'}</Text>
+                )}
+              </View>
+              <Text style={[styles.sheetTitle, styles.sheetTitleInline]}>{vehicleType} · {passengerName}</Text>
+            </View>
 
             {/* Stat chips */}
             <View style={styles.statsRow}>
@@ -550,6 +563,21 @@ const styles = StyleSheet.create({
   handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: '#A0B3B2', opacity: 0.5 },
   sheetEyebrow: { fontSize: 11, fontWeight: '900', color: teal, marginBottom: 4 },
   sheetTitle:   { fontSize: 22, fontWeight: '900', color: '#102A28', marginBottom: 14 },
+  sheetTitleInline: { flex: 1, marginBottom: 0 },
+  passengerHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
+  passengerAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#E7F5F3',
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  passengerAvatarImage: { width: '100%', height: '100%' },
+  passengerAvatarText: { color: teal, fontSize: 17, fontWeight: '900' },
   statsRow:     { flexDirection: 'row', gap: 8, marginBottom: 14 },
   routeBlock: {
     backgroundColor: '#F7FBFA', borderRadius: 16,

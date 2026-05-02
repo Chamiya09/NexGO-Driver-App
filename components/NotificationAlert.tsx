@@ -10,6 +10,7 @@ import React, {
 } from 'react';
 import {
   Animated,
+  Image,
   Platform,
   StatusBar as RNStatusBar,
   StyleSheet,
@@ -28,6 +29,7 @@ export type RideNotificationData = {
   rideId: string;
   passengerId: string;
   passengerName: string;
+  passengerImage?: string;
   vehicleType: string;
   price: number;
   pickup: Coords;
@@ -132,7 +134,11 @@ export const NotificationAlert = forwardRef<NotificationAlertRef, Props>(
         <TouchableOpacity activeOpacity={0.9} style={styles.inner} onPress={handlePress}>
           {/* Green icon bubble */}
           <View style={styles.iconBubble}>
-            <Ionicons name="car-sport" size={22} color="#FFF" />
+            {rideData?.passengerImage ? (
+              <Image source={{ uri: rideData.passengerImage }} style={styles.avatarImage} />
+            ) : (
+              <Ionicons name="car-sport" size={22} color="#FFF" />
+            )}
           </View>
 
           {/* Text */}
@@ -210,6 +216,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   textBlock: { flex: 1 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },

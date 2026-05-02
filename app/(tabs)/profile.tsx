@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   Alert,
+  Image,
   Platform,
   Pressable,
   SafeAreaView,
@@ -140,7 +141,11 @@ export default function DriverProfileScreen() {
         <View style={styles.heroCard}>
           <View style={styles.profileHead}>
             <View style={styles.avatarCircle}>
-              <Text style={styles.avatarInitials}>{initials || 'D'}</Text>
+              {driver?.profileImageUrl ? (
+                <Image source={{ uri: driver.profileImageUrl }} style={styles.avatarImage} />
+              ) : (
+                <Text style={styles.avatarInitials}>{initials || 'D'}</Text>
+              )}
             </View>
             <Text style={styles.profileName}>{fullName}</Text>
             <Text style={styles.memberCaption}>{driver?.email || 'NexGO Driver account'}</Text>
@@ -255,6 +260,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#D9E9E6',
     backgroundColor: '#E7F5F3',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   avatarInitials: {
     color: teal,

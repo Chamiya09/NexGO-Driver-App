@@ -8,6 +8,7 @@ import {
   Text,
   StatusBar as RNStatusBar,
   View,
+  Image,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router, useFocusEffect } from 'expo-router';
@@ -209,7 +210,7 @@ export default function DriverMyReviewsScreen() {
             <View style={styles.popupHeader}>
               <View style={styles.popupHeaderMain}>
                 <View style={styles.popupIcon}>
-                  <Ionicons name="star-half-outline" size={20} color={teal} />
+                  <PassengerAvatar imageUrl={selectedReview.passenger?.profileImageUrl} name={selectedReview.passenger?.fullName} size={40} />
                 </View>
                 <View style={styles.popupTitleWrap}>
               <Text style={styles.popupTitle}>Review Details</Text>
@@ -261,9 +262,7 @@ function ReviewCard({ ride, onView }: { ride: DriverReviewRide; onView: () => vo
   return (
     <View style={styles.reviewCard}>
       <View style={styles.reviewTopRow}>
-        <View style={styles.reviewIcon}>
-          <Ionicons name="star" size={18} color="#D97706" />
-        </View>
+        <PassengerAvatar imageUrl={ride.passenger?.profileImageUrl} name={ride.passenger?.fullName} size={42} />
         <View style={styles.reviewTitleWrap}>
           <Text style={styles.reviewTitle} numberOfLines={1}>
             {ride.passenger?.fullName || 'Passenger not available'}
@@ -289,6 +288,20 @@ function ReviewCard({ ride, onView }: { ride: DriverReviewRide; onView: () => vo
         <Ionicons name="eye-outline" size={15} color={teal} />
         <Text style={styles.detailsButtonText}>View Details</Text>
       </Pressable>
+    </View>
+  );
+}
+
+function PassengerAvatar({ imageUrl, name, size }: { imageUrl?: string; name?: string; size: number }) {
+  const initial = (name || 'P').trim().charAt(0).toUpperCase() || 'P';
+
+  return (
+    <View style={[styles.passengerAvatar, { width: size, height: size, borderRadius: size / 2 }]}>
+      {imageUrl ? (
+        <Image source={{ uri: imageUrl }} style={styles.passengerAvatarImage} />
+      ) : (
+        <Text style={styles.passengerAvatarText}>{initial}</Text>
+      )}
     </View>
   );
 }
@@ -531,6 +544,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF8EC',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  passengerAvatar: {
+    backgroundColor: '#E7F5F3',
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  passengerAvatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  passengerAvatarText: {
+    color: teal,
+    fontSize: 16,
+    fontWeight: '900',
   },
   reviewTitleWrap: {
     flex: 1,
