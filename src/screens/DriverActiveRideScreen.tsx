@@ -746,19 +746,20 @@ export default function DriverActiveRideScreen() {
         </View>
       </SafeAreaView>
 
-      <Pressable
-        style={[styles.rotationButton, isRotationEnabled ? styles.rotationButtonActive : styles.rotationButtonInactive]}
-        onPress={handleToggleRotation}
-        accessibilityRole="button"
-        accessibilityLabel={isRotationEnabled ? 'Disable map rotation' : 'Enable map rotation'}>
-        <Ionicons name={isRotationEnabled ? 'navigate-circle' : 'navigate-circle-outline'} size={23} color={isRotationEnabled ? '#FFFFFF' : TEAL} />
-        <Text style={[styles.rotationButtonText, isRotationEnabled ? styles.rotationButtonTextActive : styles.rotationButtonTextInactive]}>
-          {isRotationEnabled ? 'Rotate' : 'North'}
-        </Text>
-      </Pressable>
-
       <View style={styles.sheet}>
         <View style={styles.sheetHandle} />
+        <View style={styles.sheetTopRow}>
+          <Pressable
+            style={[styles.rotationButton, isRotationEnabled ? styles.rotationButtonActive : styles.rotationButtonInactive]}
+            onPress={handleToggleRotation}
+            accessibilityRole="button"
+            accessibilityLabel={isRotationEnabled ? 'Disable map rotation' : 'Enable map rotation'}>
+            <Ionicons name={isRotationEnabled ? 'navigate-circle' : 'navigate-circle-outline'} size={18} color={isRotationEnabled ? '#FFFFFF' : TEAL} />
+            <Text style={[styles.rotationButtonText, isRotationEnabled ? styles.rotationButtonTextActive : styles.rotationButtonTextInactive]}>
+              {isRotationEnabled ? 'Rotate' : 'North'}
+            </Text>
+          </Pressable>
+        </View>
 
         {isLoadingRoute ? (
           <View style={styles.loadingRow}>
@@ -940,23 +941,25 @@ const styles = StyleSheet.create({
   hudPrimary: { color: '#FFFFFF', fontSize: 35, fontWeight: '900', lineHeight: 40 },
   hudSecondary: { color: '#D9F0EE', fontSize: 17, fontWeight: '700' },
   rotationButton: {
-    position: 'absolute',
-    right: 18,
-    bottom: 170,
-    minHeight: 46,
-    borderRadius: 23,
-    paddingHorizontal: 12,
+    minHeight: 32,
+    borderRadius: 16,
+    paddingHorizontal: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 4,
     borderWidth: 1,
     shadowColor: '#001F1E',
-    shadowOpacity: 0.16,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 8,
+    elevation: 6,
     zIndex: 35,
+  },
+  sheetTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 8,
   },
   rotationButtonActive: {
     backgroundColor: TEAL,
@@ -967,7 +970,7 @@ const styles = StyleSheet.create({
     borderColor: '#D9E9E6',
   },
   rotationButtonText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '900',
   },
   rotationButtonTextActive: {
@@ -1163,7 +1166,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 14,
   },
-  codeTitle: { fontSize: 22, fontWeight: '900', color: '#102A28', marginBottom: 8 },
+  codeTitle: { fontSize: 22, fontWeight: '900', color: '#102A28', marginBottom: 8, textAlign: 'left', alignSelf: 'stretch' },
   codeSubtitle: { fontSize: 14, fontWeight: '700', color: '#617C79', textAlign: 'center', lineHeight: 20, marginBottom: 18 },
   codeInput: {
     width: '100%',
