@@ -854,12 +854,6 @@ export default function DriverActiveRideScreen() {
             <Text style={styles.codeTitle}>Confirm Passenger</Text>
             <Text style={styles.codeSubtitle}>Ask the passenger for their 6-digit code before starting the trip.</Text>
 
-            {!!requestedArrivalCode && (
-              <View style={styles.generatedCodeBox}>
-                <Text style={styles.generatedCodeLabel}>Passenger code</Text>
-                <Text style={styles.generatedCodeValue}>{requestedArrivalCode}</Text>
-              </View>
-            )}
 
             <TextInput
               value={arrivalCode}
