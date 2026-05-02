@@ -104,6 +104,7 @@ type DriverAuthContextValue = {
   deleteVehicle: () => Promise<void>;
   updateDocument: (documentType: DriverDocument['documentType'], fileUrl: string) => Promise<void>;
   updateSecurity: (twoStepVerificationEnabled: boolean) => Promise<void>;
+  applyStatus: (status: string) => void;
   logout: () => Promise<void>;
 };
 
@@ -346,6 +347,10 @@ export function DriverAuthProvider({ children }: { children: React.ReactNode }) 
     await clearDriverToken();
   };
 
+  const applyStatus = (status: string) => {
+    setDriver((current) => (current ? { ...current, status } : current));
+  };
+
   useEffect(() => {
     let mounted = true;
 
@@ -412,6 +417,7 @@ export function DriverAuthProvider({ children }: { children: React.ReactNode }) 
       deleteVehicle,
       updateDocument,
       updateSecurity,
+      applyStatus,
       logout,
     }),
     [driver, token, loading, hydrating]

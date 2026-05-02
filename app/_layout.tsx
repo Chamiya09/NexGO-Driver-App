@@ -8,6 +8,7 @@ import 'react-native-reanimated';
 import { DriverAuthProvider, useDriverAuth } from '@/context/driver-auth-context';
 import { NotificationsProvider } from '@/context/notifications-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import driverSocket from '@/lib/driverSocket';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -64,7 +65,29 @@ export default function RootLayout() {
 }
 
   function SuspendedOverlay() {
-    const { driver, loading } = useDriverAuth();
+    const { driver, loading, applyStatus } = useDriverAuth();
+
+    useEffect(() => {
+      const handleStatus = (payload: { driverId: string; status: string }) => {
+        if (!driver?.id || payload.driverId !== driver.id) return;
+        applyStatus(payload.status);
+      };
+
+      if (driver?.id && driverSocket.connected) {
+        driverSocket.emit('registerDriver', driver.id);
+      }
+
+      driverSocket.on('connect', () => {
+        if (driver?.id) {
+          driverSocket.emit('registerDriver', driver.id);
+        }
+      });
+      driverSocket.on('driver_account_status', handleStatus);
+
+      return () => {
+        driverSocket.off('driver_account_status', handleStatus);
+      };
+    }, [driver?.id, applyStatus]);
 
     if (loading || driver?.status !== 'suspended') {
       return null;
