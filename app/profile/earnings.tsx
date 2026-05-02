@@ -258,16 +258,12 @@ export default function EarningsScreen() {
           </View>
 
           <View style={styles.cashoutActions}>
-            <Pressable style={styles.saveButton}>
-              <Ionicons name="save-outline" size={16} color={teal} />
-              <Text style={styles.saveButtonText}>Save bank details</Text>
-            </Pressable>
             <Pressable
               style={[styles.cashoutButton, !canCashout && styles.cashoutButtonDisabled]}
               disabled={!canCashout}
               onPress={() => setCashoutVisible(true)}>
               <Ionicons name="wallet-outline" size={16} color="#FFF" />
-              <Text style={styles.cashoutButtonText}>Request cashout</Text>
+              <Text style={styles.cashoutButtonText}>Checkout</Text>
             </Pressable>
           </View>
 
