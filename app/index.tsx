@@ -10,7 +10,7 @@ export default function IndexScreen() {
   }
 
   if (token && driver) {
-    return <Redirect href="/(tabs)" />;
+    return <Redirect href="/(tabs)/home" />;
   }
 
   return <Redirect href="/login" />;
