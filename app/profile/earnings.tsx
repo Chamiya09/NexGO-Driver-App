@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import RefreshableScrollView from '@/components/RefreshableScrollView';
 import { useDriverAuth } from '@/context/driver-auth-context';
 import { fetchDriverStats, formatLkr, type DriverActivity, type DriverStats } from '@/lib/driver-stats';
+import { API_BASE_URL } from '@/lib/api';
 
 const teal = '#008080';
 
@@ -118,31 +119,49 @@ export default function EarningsScreen() {
   const cashoutIsValid =
     Number.isFinite(cashoutValue) && cashoutValue > 0 && cashoutValue <= availableBalance;
 
-  const executeCashout = (amount: number, onComplete: () => void) => {
+  const executeCashout = async (amount: number, onComplete: () => void) => {
     if (!Number.isFinite(amount) || amount <= 0 || amount > availableBalance) {
       Alert.alert('Invalid amount', 'Enter a cashout amount within your available balance.');
       return;
     }
 
-    setStats((current) => {
-      if (!current) return current;
-      
-      const newActivity: DriverActivity = {
-        id: `checkout-${Date.now()}`,
-        status: 'Checkout',
-        amount: -amount,
-        dateLabel: 'Just now',
-      };
+    try {
+      const response = await fetch(`${API_BASE_URL}/driver-auth/me/checkout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ amount }),
+      });
 
-      return {
-        ...current,
-        availableBalance: Math.max(0, current.availableBalance - amount),
-        pendingPayout: (current.pendingPayout ?? 0) + amount,
-        recentActivities: [newActivity, ...current.recentActivities].slice(0, 4),
-      };
-    });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Unable to process checkout');
+      }
 
-    onComplete();
+      setStats((current) => {
+        if (!current) return current;
+        
+        const newActivity: DriverActivity = {
+          id: `checkout-${Date.now()}`,
+          status: 'Checkout',
+          amount: -amount,
+          dateLabel: 'Just now',
+        };
+
+        return {
+          ...current,
+          availableBalance: Math.max(0, current.availableBalance - amount),
+          pendingPayout: (current.pendingPayout ?? 0) + amount,
+          recentActivities: [newActivity, ...current.recentActivities].slice(0, 4),
+        };
+      });
+
+      onComplete();
+    } catch (error) {
+      Alert.alert('Checkout Failed', error instanceof Error ? error.message : 'Something went wrong');
+    }
   };
 
   const handleCashout = () => {

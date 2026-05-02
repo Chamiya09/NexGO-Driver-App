@@ -81,13 +81,15 @@ export async function fetchDriverStats(token: string): Promise<DriverStats> {
     'Cache-Control': 'no-cache',
   };
 
-  const [ridesResponse, reviewsResponse] = await Promise.all([
+  const [ridesResponse, reviewsResponse, sessionResponse] = await Promise.all([
     fetch(`${API_BASE_URL}/rides/driver-rides?refresh=${Date.now()}`, { headers }),
     fetch(`${API_BASE_URL}/rides/driver-reviews?refresh=${Date.now()}`, { headers }),
+    fetch(`${API_BASE_URL}/driver-auth/session?refresh=${Date.now()}`, { headers }),
   ]);
 
   const ridesData = await parseApiResponse<{ rides?: DriverRide[] }>(ridesResponse);
   const reviewsData = await parseApiResponse<{ reviews?: DriverReviewRide[]; rides?: DriverReviewRide[] }>(reviewsResponse);
+  const sessionData = await parseApiResponse<{ driver?: { totalCashedOut?: number } }>(sessionResponse);
 
   const rides = ridesData.rides ?? [];
   const reviewedRides = (reviewsData.reviews ?? reviewsData.rides ?? []).filter(
@@ -130,7 +132,7 @@ export async function fetchDriverStats(token: string): Promise<DriverStats> {
         return rideDate ? isSameLocalDay(rideDate, now) : false;
       })
       .reduce((sum, ride) => sum + (Number(ride.price) || 0), 0),
-    availableBalance: completedRides.reduce((sum, ride) => sum + (Number(ride.price) || 0), 0),
+    availableBalance: Math.max(0, completedRides.reduce((sum, ride) => sum + (Number(ride.price) || 0), 0) - (sessionData.driver?.totalCashedOut || 0)),
     pendingPayout: activeRides.reduce((sum, ride) => sum + (Number(ride.price) || 0), 0),
     averageRating: ratings.length
       ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
