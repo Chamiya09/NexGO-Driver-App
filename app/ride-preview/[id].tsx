@@ -17,6 +17,7 @@ import { type DriverProfile, useDriverAuth } from '@/context/driver-auth-context
 import { useNotifications } from '@/context/notifications-context';
 import driverSocket from '@/lib/driverSocket';
 import { MAP_TILE_URL_TEMPLATE } from '@/lib/mapTiles';
+import { VehicleCategoryIcon } from '@/components/VehicleCategoryIcon';
 
 const teal = '#008080';
 
@@ -414,6 +415,9 @@ export default function RidePreviewScreen() {
                   <Text style={styles.passengerAvatarText}>{passengerName.trim().charAt(0).toUpperCase() || 'P'}</Text>
                 )}
               </View>
+              <View style={styles.vehicleTypeChip}>
+                <VehicleCategoryIcon category={vehicleType} size={28} active />
+              </View>
               <Text style={[styles.sheetTitle, styles.sheetTitleInline]}>{vehicleType} · {passengerName}</Text>
             </View>
 
@@ -432,7 +436,7 @@ export default function RidePreviewScreen() {
 
             <View style={styles.driverDetailsCard}>
               <View style={styles.driverDetailsIcon}>
-                <Ionicons name="car-sport-outline" size={18} color={teal} />
+                <VehicleCategoryIcon category={driver?.vehicle?.category ?? vehicleType} size={28} active />
               </View>
               <View style={styles.driverDetailsText}>
                 <Text style={styles.driverDetailsTitle}>{driver?.fullName || 'Driver profile'}</Text>
@@ -609,6 +613,17 @@ const styles = StyleSheet.create({
   },
   passengerAvatarImage: { width: '100%', height: '100%' },
   passengerAvatarText: { color: teal, fontSize: 17, fontWeight: '900' },
+  vehicleTypeChip: {
+    width: 42,
+    height: 34,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#F7FBFA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
   statsRow:     { flexDirection: 'row', gap: 8, marginBottom: 14 },
   driverDetailsCard: {
     minHeight: 62,

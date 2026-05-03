@@ -24,6 +24,7 @@ import driverSocket from '@/lib/driverSocket';
 import { type DriverProfile, useDriverAuth } from '@/context/driver-auth-context';
 import { MAP_TILE_URL_TEMPLATE } from '@/lib/mapTiles';
 import { clearDriverActiveRide, saveDriverActiveRide } from '@/lib/activeRideStorage';
+import { VehicleCategoryIcon } from '@/components/VehicleCategoryIcon';
 import {
   DriverRideStage,
   LatLng,
@@ -785,6 +786,9 @@ export default function DriverActiveRideScreen() {
                       <Text style={styles.passengerAvatarText}>{passengerName.trim().charAt(0).toUpperCase() || 'P'}</Text>
                     )}
                   </View>
+                  <View style={styles.vehicleTypeChip}>
+                    <VehicleCategoryIcon category={vehicleType} size={28} active />
+                  </View>
                   <Text style={[styles.sheetTitle, styles.sheetTitleInline]}>{passengerName}</Text>
                 </View>
               </>
@@ -798,7 +802,7 @@ export default function DriverActiveRideScreen() {
             {!isColspan && (
               <View style={styles.driverDetailsCard}>
                 <View style={styles.driverDetailsIcon}>
-                  <Ionicons name="car-sport-outline" size={18} color={TEAL} />
+                  <VehicleCategoryIcon category={driver?.vehicle?.category ?? vehicleType} size={28} active />
                 </View>
                 <View style={styles.driverDetailsText}>
                   <Text style={styles.driverDetailsTitle}>{driver?.fullName || 'Driver profile'}</Text>
@@ -1062,6 +1066,17 @@ const styles = StyleSheet.create({
   },
   passengerAvatarImage: { width: '100%', height: '100%' },
   passengerAvatarText: { color: TEAL, fontSize: 19, fontWeight: '900' },
+  vehicleTypeChip: {
+    width: 42,
+    height: 34,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#F7FBFA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
   ratingRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 6 },
   ratingText: { color: '#406866', fontWeight: '700' },
   driverDetailsCard: {

@@ -18,6 +18,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import RefreshableScrollView from '@/components/RefreshableScrollView';
+import { VehicleCategoryIcon } from '@/components/VehicleCategoryIcon';
 import { type DriverVehicle, useDriverAuth } from '@/context/driver-auth-context';
 
 const teal = '#008080';
@@ -298,7 +299,7 @@ export default function DriverVehicleDetailsScreen() {
                 <View style={styles.vehicleCardHeader}>
                   <View style={styles.vehicleHeaderLeft}>
                     <View style={styles.vehicleIconBadge}>
-                      <Ionicons name="car-sport-outline" size={24} color={teal} />
+                      <VehicleCategoryIcon category={vehicle.category} size={34} active />
                     </View>
 
                     <View style={styles.vehicleTitleWrap}>
@@ -381,6 +382,9 @@ export default function DriverVehicleDetailsScreen() {
                         key={category}
                         style={[styles.categoryPill, isSelected && styles.categoryPillActive]}
                         onPress={() => updateField('category', category)}>
+                        <View style={[styles.categoryIconWrap, isSelected && styles.categoryIconWrapActive]}>
+                          <VehicleCategoryIcon category={category} size={28} active={isSelected} />
+                        </View>
                         <Text style={[styles.categoryPillText, isSelected && styles.categoryPillTextActive]}>{category}</Text>
                       </Pressable>
                     );
@@ -675,19 +679,34 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   categoryPill: {
-    minHeight: 36,
-    minWidth: 62,
-    borderRadius: 10,
+    minHeight: 72,
+    minWidth: 82,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#D9E9E6',
     backgroundColor: '#F7FBFA',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
+    gap: 6,
   },
   categoryPillActive: {
     borderColor: teal,
     backgroundColor: '#E7F5F3',
+  },
+  categoryIconWrap: {
+    width: 44,
+    height: 34,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categoryIconWrapActive: {
+    borderColor: '#CFE4E0',
+    backgroundColor: '#FFFFFF',
   },
   categoryPillText: {
     color: '#617C79',
