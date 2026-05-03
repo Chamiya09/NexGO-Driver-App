@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Alert,
+  Linking,
   Platform,
   Pressable,
   SafeAreaView,
@@ -179,6 +180,24 @@ export default function DriverDocumentUploadsScreen() {
     ]);
   };
 
+  const handleViewDocument = async (fileUrl?: string) => {
+    if (!fileUrl) {
+      Alert.alert('No document found', 'Upload this document before trying to view it.');
+      return;
+    }
+
+    try {
+      const canOpen = await Linking.canOpenURL(fileUrl);
+      if (!canOpen) {
+        throw new Error('This document link cannot be opened on this device.');
+      }
+
+      await Linking.openURL(fileUrl);
+    } catch (error) {
+      Alert.alert('Unable to open document', error instanceof Error ? error.message : 'Please try again later.');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
@@ -228,6 +247,7 @@ export default function DriverDocumentUploadsScreen() {
             document={document}
             isUploading={uploadingDocumentId === document.id}
             onUpload={() => handleUpload(document.id)}
+            onView={() => handleViewDocument(document.fileUrl)}
           />
         ))}
 
@@ -247,13 +267,16 @@ function DocumentCard({
   document,
   isUploading,
   onUpload,
+  onView,
 }: {
   document: UploadDocument;
   isUploading: boolean;
   onUpload: () => void;
+  onView: () => void;
 }) {
   const meta = statusMeta[document.status];
   const actionLabel = document.status === 'missing' ? 'Upload' : 'Replace';
+  const hasDocumentFile = Boolean(document.fileUrl);
 
   return (
     <View style={styles.documentCard}>
@@ -284,14 +307,23 @@ function DocumentCard({
             <Text style={styles.rejectionText}>{document.rejectionReason}</Text>
           ) : null}
         </View>
-        <Pressable
-          style={[styles.uploadButton, isUploading && styles.uploadButtonDisabled]}
-          onPress={onUpload}
-          disabled={isUploading}
-        >
-          <Ionicons name="cloud-upload-outline" size={15} color={teal} />
-          <Text style={styles.uploadButtonText}>{isUploading ? 'Uploading' : actionLabel}</Text>
-        </Pressable>
+        <View style={styles.documentActionRow}>
+          {hasDocumentFile ? (
+            <Pressable style={styles.viewButton} onPress={onView}>
+              <Ionicons name="eye-outline" size={15} color="#102A28" />
+              <Text style={styles.viewButtonText}>View</Text>
+            </Pressable>
+          ) : null}
+
+          <Pressable
+            style={[styles.uploadButton, isUploading && styles.uploadButtonDisabled]}
+            onPress={onUpload}
+            disabled={isUploading}
+          >
+            <Ionicons name="cloud-upload-outline" size={15} color={teal} />
+            <Text style={styles.uploadButtonText}>{isUploading ? 'Uploading' : actionLabel}</Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -489,6 +521,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
     gap: 10,
   },
   updatedWrap: {
@@ -505,6 +538,30 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     fontWeight: '600',
+  },
+  documentActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  viewButton: {
+    minHeight: 34,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  viewButtonText: {
+    color: '#102A28',
+    fontSize: 12,
+    fontWeight: '800',
   },
   uploadButton: {
     minHeight: 34,
