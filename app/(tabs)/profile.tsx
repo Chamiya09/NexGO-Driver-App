@@ -1,6 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
-  Alert,
   Image,
   Platform,
   Pressable,
@@ -15,6 +14,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import RefreshableScrollView from '@/components/RefreshableScrollView';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useDriverAuth } from '@/context/driver-auth-context';
 
 const teal = '#008080';
@@ -91,6 +91,8 @@ const baseProfileSections: ProfileSection[] = [
 
 export default function DriverProfileScreen() {
   const { driver, logout, refreshDriver } = useDriverAuth();
+  const [logoutConfirmVisible, setLogoutConfirmVisible] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const fullName = driver?.fullName || 'NexGO Driver';
   const documents = driver?.documents || [];
@@ -118,17 +120,7 @@ export default function DriverProfileScreen() {
   );
 
   const confirmLogout = () => {
-    Alert.alert('Log out', 'Do you want to sign out of this driver device?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Log out',
-        style: 'destructive',
-        onPress: () => {
-          void logout();
-          router.replace('/login');
-        },
-      },
-    ]);
+    setLogoutConfirmVisible(true);
   };
 
   return (
@@ -223,6 +215,28 @@ export default function DriverProfileScreen() {
           <Text style={styles.footerBottom}>Version 1.0.0 (driver foundation)</Text>
         </View>
       </RefreshableScrollView>
+      <ConfirmDialog
+        visible={logoutConfirmVisible}
+        title="Log out"
+        message="Do you want to sign out of this driver device?"
+        confirmLabel="Log out"
+        destructive
+        loading={loggingOut}
+        icon="log-out-outline"
+        onCancel={() => {
+          if (!loggingOut) setLogoutConfirmVisible(false);
+        }}
+        onConfirm={async () => {
+          setLoggingOut(true);
+          try {
+            await logout();
+            setLogoutConfirmVisible(false);
+            router.replace('/login');
+          } finally {
+            setLoggingOut(false);
+          }
+        }}
+      />
     </SafeAreaView>
   );
 }

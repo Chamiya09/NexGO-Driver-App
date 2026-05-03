@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -18,6 +17,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import RefreshableScrollView from '@/components/RefreshableScrollView';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { VehicleCategoryIcon } from '@/components/VehicleCategoryIcon';
 import { type DriverVehicle, useDriverAuth } from '@/context/driver-auth-context';
 
@@ -57,6 +57,7 @@ export default function DriverVehicleDetailsScreen() {
   const [isVehicleLoading, setIsVehicleLoading] = useState(false);
   const [isSavingVehicle, setIsSavingVehicle] = useState(false);
   const [isDeletingVehicle, setIsDeletingVehicle] = useState(false);
+  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const vehicle = driver?.vehicle || null;
@@ -186,12 +187,10 @@ export default function DriverVehicleDetailsScreen() {
   };
 
   const confirmDeleteVehicle = () => {
-    Alert.alert('Delete vehicle', 'Do you want to remove this vehicle from your driver profile?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
+    setDeleteConfirmVisible(true);
+  };
+
+  const handleDeleteVehicle = async () => {
           setIsDeletingVehicle(true);
           setErrorMessage(null);
           setSuccessMessage(null);
@@ -205,9 +204,6 @@ export default function DriverVehicleDetailsScreen() {
           } finally {
             setIsDeletingVehicle(false);
           }
-        },
-      },
-    ]);
   };
 
   return (
@@ -435,6 +431,22 @@ export default function DriverVehicleDetailsScreen() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
+      <ConfirmDialog
+        visible={deleteConfirmVisible}
+        title="Delete vehicle"
+        message="Do you want to remove this vehicle from your driver profile?"
+        confirmLabel="Delete"
+        destructive
+        loading={isDeletingVehicle}
+        icon="trash-outline"
+        onCancel={() => {
+          if (!isDeletingVehicle) setDeleteConfirmVisible(false);
+        }}
+        onConfirm={async () => {
+          await handleDeleteVehicle();
+          setDeleteConfirmVisible(false);
+        }}
+      />
     </SafeAreaView>
   );
 }
