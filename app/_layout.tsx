@@ -72,22 +72,25 @@ export default function RootLayout() {
 
     useEffect(() => {
       const handleStatus = (payload: { driverId: string; status: string }) => {
-        if (!driver?.id || payload.driverId !== driver.id) return;
+        if (!driver?.id || String(payload.driverId) !== String(driver.id)) return;
         applyStatus(payload.status);
       };
 
-      if (driver?.id && driverSocket.connected) {
-        driverSocket.emit('registerDriver', driver.id);
-      }
-
-      driverSocket.on('connect', () => {
+      const registerCurrentDriver = () => {
         if (driver?.id) {
           driverSocket.emit('registerDriver', driver.id);
         }
-      });
+      };
+
+      if (driver?.id && driverSocket.connected) {
+        registerCurrentDriver();
+      }
+
+      driverSocket.on('connect', registerCurrentDriver);
       driverSocket.on('driver_account_status', handleStatus);
 
       return () => {
+        driverSocket.off('connect', registerCurrentDriver);
         driverSocket.off('driver_account_status', handleStatus);
       };
     }, [driver?.id, applyStatus]);
