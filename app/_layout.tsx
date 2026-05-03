@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState, type PropsWithChildren } from 'react';
 import { Keyboard, Modal, StyleSheet, Text, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { DriverAuthProvider, useDriverAuth } from '@/context/driver-auth-context';
@@ -46,21 +47,23 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <DriverAuthProvider>
-        <NotificationsProvider>
-          <KeyboardDismissView>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-              <Stack.Screen name="ride-preview/[id]" />
-            </Stack>
-            <SuspendedOverlay />
-            <StatusBar style="auto" />
-          </KeyboardDismissView>
-        </NotificationsProvider>
-      </DriverAuthProvider>
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <DriverAuthProvider>
+          <NotificationsProvider>
+            <KeyboardDismissView>
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+                <Stack.Screen name="ride-preview/[id]" />
+              </Stack>
+              <SuspendedOverlay />
+              <StatusBar style="auto" />
+            </KeyboardDismissView>
+          </NotificationsProvider>
+        </DriverAuthProvider>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
 
