@@ -2,6 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useResponsiveLayout } from '@/lib/responsive';
+
 const teal = '#008080';
 
 type ConfirmDialogProps = {
@@ -29,18 +31,19 @@ export function ConfirmDialog({
   onCancel,
   onConfirm,
 }: ConfirmDialogProps) {
+  const responsive = useResponsiveLayout();
   const actionColor = destructive ? '#C13B3B' : teal;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <View style={styles.overlay}>
-        <View style={styles.card}>
+      <View style={[styles.overlay, { padding: responsive.modalPadding }]}>
+        <View style={[styles.card, { padding: responsive.cardPadding }]}>
           <View style={[styles.iconWrap, { backgroundColor: destructive ? '#FFF4F4' : '#E7F5F3' }]}>
             <Ionicons name={icon} size={25} color={actionColor} />
           </View>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.message}>{message}</Text>
-          <View style={styles.actions}>
+          <View style={[styles.actions, responsive.isTinyPhone ? styles.actionsStacked : null]}>
             <Pressable style={[styles.button, styles.cancelButton]} disabled={loading} onPress={onCancel}>
               <Text style={styles.cancelText}>{cancelLabel}</Text>
             </Pressable>
@@ -104,6 +107,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginTop: 18,
+  },
+  actionsStacked: {
+    flexDirection: 'column-reverse',
   },
   button: {
     flex: 1,

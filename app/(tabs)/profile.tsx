@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import RefreshableScrollView from '@/components/RefreshableScrollView';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useDriverAuth } from '@/context/driver-auth-context';
+import { useResponsiveLayout } from '@/lib/responsive';
 
 const teal = '#008080';
 
@@ -91,6 +92,7 @@ const baseProfileSections: ProfileSection[] = [
 
 export default function DriverProfileScreen() {
   const { driver, logout, refreshDriver } = useDriverAuth();
+  const responsive = useResponsiveLayout();
   const [logoutConfirmVisible, setLogoutConfirmVisible] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -127,10 +129,10 @@ export default function DriverProfileScreen() {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
       <RefreshableScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[styles.container, { paddingHorizontal: responsive.screenPadding }]}
         showsVerticalScrollIndicator={false}
         onRefreshPage={refreshDriver}>
-        <View style={styles.heroCard}>
+        <View style={[styles.heroCard, { padding: responsive.cardPadding }]}>
           <View style={styles.profileHead}>
             <View style={styles.avatarCircle}>
               {driver?.profileImageUrl ? (
@@ -145,7 +147,7 @@ export default function DriverProfileScreen() {
 
           <View style={styles.metricsRow}>
             {profileMetrics.map((metric) => (
-              <View key={metric.label} style={styles.metricItem}>
+              <View key={metric.label} style={[styles.metricItem, { minWidth: responsive.metricMinWidth }]}>
                 <Ionicons name={metric.icon} size={16} color={teal} />
                 <Text style={styles.metricValue}>{metric.value}</Text>
                 <Text style={styles.metricLabel}>{metric.label}</Text>
@@ -248,7 +250,6 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
   },
   container: {
-    paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 34,
   },
@@ -257,7 +258,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#D9E9E6',
     backgroundColor: '#FFFFFF',
-    padding: 16,
     marginBottom: 18,
   },
   profileHead: {
@@ -298,6 +298,7 @@ const styles = StyleSheet.create({
   },
   metricsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
     marginBottom: 14,
   },

@@ -20,6 +20,7 @@ import RefreshableScrollView from '@/components/RefreshableScrollView';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { VehicleCategoryIcon } from '@/components/VehicleCategoryIcon';
 import { type DriverVehicle, useDriverAuth } from '@/context/driver-auth-context';
+import { useResponsiveLayout } from '@/lib/responsive';
 
 const teal = '#008080';
 
@@ -51,6 +52,7 @@ const initialVehicleForm: VehicleForm = {
 
 export default function DriverVehicleDetailsScreen() {
   const { driver, createVehicle, updateVehicle, deleteVehicle, getVehicle } = useDriverAuth();
+  const responsive = useResponsiveLayout();
   const [form, setForm] = useState<VehicleForm>(initialVehicleForm);
   const [modalMode, setModalMode] = useState<VehicleModalMode>('add');
   const [isVehicleModalVisible, setIsVehicleModalVisible] = useState(false);
@@ -211,7 +213,7 @@ export default function DriverVehicleDetailsScreen() {
       <StatusBar style="dark" />
       <KeyboardAvoidingView style={styles.keyboardWrap} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <RefreshableScrollView
-          contentContainerStyle={styles.container}
+          contentContainerStyle={[styles.container, { paddingHorizontal: responsive.screenPadding }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           onRefreshPage={() => loadVehicle({ showSuccess: true })}>
@@ -223,7 +225,7 @@ export default function DriverVehicleDetailsScreen() {
             <View style={styles.topBarSpacer} />
           </View>
 
-          <View style={styles.heroCard}>
+          <View style={[styles.heroCard, { padding: responsive.cardPadding }]}>
             <View style={styles.heroTopRow}>
               <View style={styles.heroIcon}>
                 <Ionicons name="car-sport-outline" size={28} color={teal} />
@@ -348,7 +350,7 @@ export default function DriverVehicleDetailsScreen() {
               contentContainerStyle={styles.modalScrollContent}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}>
-              <View style={styles.modalCard}>
+              <View style={[styles.modalCard, { padding: responsive.cardPadding }]}>
                 <View style={styles.modalHeader}>
                   <View>
                     <Text style={styles.modalTitle}>{modalMode === 'edit' ? 'Update Vehicle' : 'Add Vehicle'}</Text>
@@ -529,7 +531,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   container: {
-    paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 28,
   },
@@ -563,8 +564,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#D9E9E6',
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
     marginBottom: 12,
   },
   heroTopRow: {
@@ -691,6 +690,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   categoryPill: {
+    flexGrow: 1,
+    flexBasis: 92,
     minHeight: 72,
     minWidth: 82,
     borderRadius: 12,
@@ -991,7 +992,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#D9E9E6',
     backgroundColor: '#FFFFFF',
-    padding: 14,
   },
   modalHeader: {
     flexDirection: 'row',
