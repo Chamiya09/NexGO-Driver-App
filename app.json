@@ -9,7 +9,15 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Allow NexGO Driver to use your current location for ride matching and navigation.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow NexGO Driver to keep your live ride location updated while trips are active, even when the app is in the background.",
+        "NSLocationAlwaysUsageDescription": "Allow NexGO Driver to keep your live ride location updated while trips are active.",
+        "NSCameraUsageDescription": "Allow NexGO Driver to use your camera for profile photos and required driver documents.",
+        "NSPhotoLibraryUsageDescription": "Allow NexGO Driver to access photos for profile pictures and document uploads.",
+        "NSPhotoLibraryAddUsageDescription": "Allow NexGO Driver to save captured document photos."
+      }
     },
     "android": {
       "adaptiveIcon": {
