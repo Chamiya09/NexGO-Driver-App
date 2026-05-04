@@ -40,7 +40,15 @@ export function VehicleCategoryIcon({
   );
 }
 
-function normalizeVehicleCategory(category?: string | null): VehicleCategory | null {
+export function getVehicleMarkerSource(category?: string | null) {
+  return vehicleMarkerImages[normalizeVehicleCategory(category) || 'Default'];
+}
+
+export function getVehicleMarkerUri(category?: string | null) {
+  return Image.resolveAssetSource(getVehicleMarkerSource(category))?.uri;
+}
+
+export function normalizeVehicleCategory(category?: string | null): VehicleCategory | null {
   const value = String(category || '').trim().toLowerCase();
 
   if (value === 'bike' || value === 'motorbike') return 'Bike';

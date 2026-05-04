@@ -11,13 +11,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { type DriverProfile, useDriverAuth } from '@/context/driver-auth-context';
 import { useNotifications } from '@/context/notifications-context';
 import driverSocket from '@/lib/driverSocket';
-import { MAP_TILE_URL_TEMPLATE } from '@/lib/mapTiles';
-import { VehicleCategoryIcon } from '@/components/VehicleCategoryIcon';
+import { CustomOsmMap, CustomOsmMapRef } from '@/components/CustomOsmMap';
+import { VehicleCategoryIcon, getVehicleMarkerUri } from '@/components/VehicleCategoryIcon';
 
 const teal = '#008080';
 
@@ -54,7 +53,7 @@ function createDirectRoute(from: LatLng, to: LatLng): RouteState {
   };
 }
 
-function fitRoute(map: MapView | null, route: RouteState, animated = true, delayMs = 0) {
+function fitRoute(map: CustomOsmMapRef | null, route: RouteState, animated = true, delayMs = 0) {
   if (!route?.coords.length) return;
 
   const fit = () => {
@@ -104,7 +103,7 @@ export default function RidePreviewScreen() {
   const router = useRouter();
   const { driver } = useDriverAuth();
   const { removeNotification } = useNotifications();
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<CustomOsmMapRef>(null);
 
   const params = useLocalSearchParams<{
     id: string;
@@ -287,75 +286,49 @@ export default function RidePreviewScreen() {
       <StatusBar style="dark" translucent backgroundColor="transparent" />
 
       {/* Full-screen Map */}
-      <MapView
+      <CustomOsmMap
         ref={mapRef}
         style={StyleSheet.absoluteFillObject}
-        mapType="none"
-        loadingEnabled={true}
-        loadingBackgroundColor="#EAE6DF"
-        loadingIndicatorColor="#169F95"
         initialRegion={{
           latitude: pickup.latitude || 6.9271,
           longitude: pickup.longitude || 79.8612,
           latitudeDelta: 0.06,
           longitudeDelta: 0.06,
-        }}>
-        <UrlTile
-          urlTemplate={MAP_TILE_URL_TEMPLATE}
-          maximumZ={19}
-          flipY={false}
-        />
+        }}
+        markers={[
+          ...(mapMode === 'navigate' && hasDriverCoords
+            ? [{
+                id: 'driver',
+                coordinate: driverPos,
+                color: '#4A6FA5',
+                iconUri: getVehicleMarkerUri(driver?.vehicle?.category ?? vehicleType),
+                kind: 'vehicle' as const,
+                title: 'Your location',
+                zIndex: 50,
+              }]
+            : []),
+          ...(pickup.latitude !== 0
+            ? [{ id: 'pickup', coordinate: pickup, color: '#169F95', kind: 'label' as const, label: pName || 'Pickup', zIndex: 40 }]
+            : []),
+          ...(mapMode === 'trip' && dropoff.latitude !== 0
+            ? [{ id: 'dropoff', coordinate: dropoff, color: '#E74C3C', kind: 'label' as const, label: dName || 'Drop-off', zIndex: 40 }]
+            : []),
+        ]}
+        polylines={activeRoute ? [
+          { id: 'route-outer', coordinates: activeRoute.coords, color: mapMode === 'navigate' ? '#1A6B3C' : '#017270', width: 8, opacity: 0.9 },
+          { id: 'route-inner', coordinates: activeRoute.coords, color: mapMode === 'navigate' ? '#27AE60' : '#169F95', width: 4, opacity: 1 },
+        ] : []}
+      />
 
         {/* Driver position marker (navigate mode) */}
-        {mapMode === 'navigate' && hasDriverCoords && (
-          <Marker coordinate={driverPos} anchor={{ x: 0.5, y: 0.5 }} zIndex={5}>
-            <View style={styles.driverMarker}>
-              <Ionicons name="car-sport" size={16} color="#FFF" />
-            </View>
-          </Marker>
-        )}
 
         {/* Pickup marker */}
-        {pickup.latitude !== 0 && (
-          <Marker coordinate={pickup} anchor={{ x: 0.5, y: 1 }} zIndex={4}>
-            <View style={styles.markerPill}>
-              <View style={[styles.markerDot, { backgroundColor: '#169F95' }]} />
-              <Text style={styles.markerText} numberOfLines={1}>{pName || 'Pickup'}</Text>
-            </View>
-            <View style={styles.markerPointer} />
-          </Marker>
-        )}
 
         {/* Dropoff marker (trip mode) */}
-        {mapMode === 'trip' && dropoff.latitude !== 0 && (
-          <Marker coordinate={dropoff} anchor={{ x: 0.5, y: 1 }} zIndex={4}>
-            <View style={styles.markerPill}>
-              <View style={[styles.markerDot, { backgroundColor: '#E74C3C' }]} />
-              <Text style={styles.markerText} numberOfLines={1}>{dName || 'Drop-off'}</Text>
-            </View>
-            <View style={styles.markerPointer} />
-          </Marker>
-        )}
 
         {/* Route polyline — outer glow */}
-        {activeRoute && (
-          <Polyline
-            coordinates={activeRoute.coords}
-            strokeColor={mapMode === 'navigate' ? '#1A6B3C' : '#017270'}
-            strokeWidth={8}
-            lineJoin="round" lineCap="round" zIndex={2}
-          />
-        )}
         {/* Route polyline — inner */}
-        {activeRoute && (
-          <Polyline
-            coordinates={activeRoute.coords}
-            strokeColor={mapMode === 'navigate' ? '#27AE60' : '#169F95'}
-            strokeWidth={4}
-            lineJoin="round" lineCap="round" zIndex={3}
-          />
-        )}
-      </MapView>
+        
 
       {/* ── Top bar ── */}
       <SafeAreaView style={styles.topSafe}>

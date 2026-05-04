@@ -8,6 +8,7 @@ import 'react-native-reanimated';
 
 import { DriverAuthProvider, useDriverAuth } from '@/context/driver-auth-context';
 import { NotificationsProvider } from '@/context/notifications-context';
+import { useAppPermissions } from '@/hooks/useAppPermissions';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import driverSocket from '@/lib/driverSocket';
 
@@ -45,6 +46,7 @@ function KeyboardDismissView({ children }: PropsWithChildren) {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  useAppPermissions();
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

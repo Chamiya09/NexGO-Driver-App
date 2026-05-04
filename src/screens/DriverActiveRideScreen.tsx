@@ -18,13 +18,12 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
-import MapView, { Marker, Polyline, UrlTile, AnimatedRegion } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import driverSocket from '@/lib/driverSocket';
 import { type DriverProfile, useDriverAuth } from '@/context/driver-auth-context';
-import { MAP_TILE_URL_TEMPLATE } from '@/lib/mapTiles';
+import { CustomOsmMap, CustomOsmMapRef } from '@/components/CustomOsmMap';
 import { clearDriverActiveRide, saveDriverActiveRide } from '@/lib/activeRideStorage';
-import { VehicleCategoryIcon } from '@/components/VehicleCategoryIcon';
+import { VehicleCategoryIcon, getVehicleMarkerUri } from '@/components/VehicleCategoryIcon';
 import {
   DriverRideStage,
   LatLng,
@@ -149,7 +148,7 @@ function distanceMeters(a: LatLng, b: LatLng) {
 
 export default function DriverActiveRideScreen() {
   const router = useRouter();
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<CustomOsmMapRef>(null);
   const lastPositionRef = useRef<LatLng | null>(null);
   const cameraHeadingRef = useRef(0);
   const isRotationEnabledRef = useRef(true);
@@ -161,6 +160,7 @@ export default function DriverActiveRideScreen() {
   const passengerName = params.passengerName ?? 'Passenger';
   const passengerImage = params.passengerImage ?? '';
   const passengerRating = params.passengerRating ?? '4.9';
+  const vehicleType = params.vehicleType ?? 'Vehicle';
   const pickupName = params.pName ?? 'Pickup point';
   const dropoffName = params.dName ?? 'Destination';
 
@@ -184,13 +184,6 @@ export default function DriverActiveRideScreen() {
   const driverPositionRef = useRef<LatLng>(initialDriverPosition);
 
   const [driverPosition, setDriverPosition] = useState<LatLng>(initialDriverPosition);
-
-  const animatedDrCoords = useRef(new AnimatedRegion({
-    latitude: initialDriverPosition.latitude,
-    longitude: initialDriverPosition.longitude,
-    latitudeDelta: 0.05,
-    longitudeDelta: 0.05,
-  })).current;
 
   const headingAnim = useRef(new Animated.Value(0)).current;
 
@@ -472,13 +465,6 @@ export default function DriverActiveRideScreen() {
 
       setDriverPosition(next);
 
-      animatedDrCoords.timing({
-        latitude: next.latitude,
-        longitude: next.longitude,
-        useNativeDriver: false,
-        duration: NAVIGATION_ANIMATION_MS
-      } as Parameters<typeof animatedDrCoords.timing>[0]).start();
-
       if (driver?.id && rideId) {
         driverSocket.emit('updateDriverLocation', {
           driverId: driver.id,
@@ -589,7 +575,7 @@ export default function DriverActiveRideScreen() {
       driverSocket.off('rideError', handleRideError);
       driverSocket.off('arrivalCodeRequested', handleArrivalCodeRequested);
     };
-  }, [animatedDrCoords, driver?.id, driver?.vehicle?.category, dropoff, headingAnim, pickup, rideId, router, stage]);
+  }, [driver?.id, driver?.vehicle?.category, dropoff, headingAnim, pickup, rideId, router, stage]);
 
   const transitionRide = (eventName: 'driver_arrived' | 'start_trip' | 'complete_trip', optimistic: RideActionStatus) => {
     if (!driver?.id || !rideId || isActionBusy) return;
@@ -680,65 +666,43 @@ export default function DriverActiveRideScreen() {
       <Stack.Screen options={{ headerShown: false, gestureEnabled: false }} />
       <StatusBar style="dark" translucent backgroundColor="transparent" />
 
-      <MapView
+      <CustomOsmMap
         ref={mapRef}
         style={StyleSheet.absoluteFill}
-        mapType="none"
         onMapReady={() => setMapReady(true)}
         initialRegion={{
           latitude: initialDriverPosition.latitude || 6.9271,
           longitude: initialDriverPosition.longitude || 79.8612,
           latitudeDelta: 0.06,
           longitudeDelta: 0.06,
-        }}>
-        <UrlTile
-          urlTemplate={MAP_TILE_URL_TEMPLATE}
-          maximumZ={19}
-          flipY={false}
-        />
-
-        {stage === 'TO_PICKUP' && tripRoute.length > 1 && (
-          <Polyline coordinates={tripRoute} strokeWidth={3} strokeColor="rgba(17, 75, 122, 0.28)" lineCap="round" />
-        )}
-
-        {highlightedRoute.length > 1 && (
-          <>
-            <Polyline coordinates={highlightedRoute} strokeWidth={7} strokeColor="#074343" lineCap="round" />
-            <Polyline coordinates={highlightedRoute} strokeWidth={4} strokeColor={stage === 'TO_PICKUP' ? TEAL : DEEP_BLUE} lineCap="round" />
-          </>
-        )}
-
-        <Marker.Animated coordinate={animatedDrCoords as any} anchor={{ x: 0.5, y: 0.5 }} flat>
-          <Animated.View style={[styles.markerBubble, {
-            transform: [{
-              rotate: headingAnim.interpolate({
-                inputRange: [0, 360],
-                outputRange: ['0deg', '360deg']
-              })
-            }]
-          }]}>
-            <Image source={require('@/assets/images/icon.png')} style={styles.driverAsset} />
-          </Animated.View>
-        </Marker.Animated>
-
-        {stage === 'TO_PICKUP' && (
-          <Marker coordinate={pickup} anchor={{ x: 0.5, y: 1 }}>
-            <View style={styles.landmarkCard}>
-              <Image source={require('@/assets/images/android-icon-foreground.png')} style={styles.landmarkAsset} />
-              <Text style={styles.landmarkLabel} numberOfLines={1}>{pickupName}</Text>
-            </View>
-          </Marker>
-        )}
-
-        {stage === 'IN_TRANSIT' && (
-          <Marker coordinate={dropoff} anchor={{ x: 0.5, y: 1 }}>
-            <View style={styles.landmarkCardBlue}>
-              <Image source={require('@/assets/images/splash-icon.png')} style={styles.landmarkAsset} />
-              <Text style={styles.landmarkLabelBlue} numberOfLines={1}>{dropoffName}</Text>
-            </View>
-          </Marker>
-        )}
-      </MapView>
+        }}
+        markers={[
+          {
+            id: 'driver',
+            coordinate: driverPosition,
+            color: TEAL,
+            iconUri: getVehicleMarkerUri(driver?.vehicle?.category ?? vehicleType),
+            heading: cameraHeadingRef.current,
+            kind: 'vehicle',
+            title: passengerName,
+            zIndex: 60,
+          },
+          ...(stage === 'TO_PICKUP'
+            ? [{ id: 'pickup', coordinate: pickup, color: TEAL, kind: 'label' as const, label: pickupName, zIndex: 50 }]
+            : [{ id: 'dropoff', coordinate: dropoff, color: DEEP_BLUE, kind: 'label' as const, label: dropoffName, zIndex: 50 }]),
+        ]}
+        polylines={[
+          ...(stage === 'TO_PICKUP' && tripRoute.length > 1
+            ? [{ id: 'trip-muted', coordinates: tripRoute, color: 'rgba(17, 75, 122, 0.28)', width: 3, opacity: 0.7 }]
+            : []),
+          ...(highlightedRoute.length > 1
+            ? [
+                { id: 'highlight-outer', coordinates: highlightedRoute, color: '#074343', width: 7, opacity: 0.9 },
+                { id: 'highlight-inner', coordinates: highlightedRoute, color: stage === 'TO_PICKUP' ? TEAL : DEEP_BLUE, width: 4, opacity: 1 },
+              ]
+            : []),
+        ]}
+      />
 
       <SafeAreaView pointerEvents="box-none" style={styles.overlayRoot}>
         <View style={styles.hudCard}>
