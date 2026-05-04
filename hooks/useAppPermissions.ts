@@ -1,19 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Linking, Platform } from 'react-native';
-import * as Camera from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import * as MediaLibrary from 'expo-media-library';
 
-const PERMISSIONS_BOOTSTRAP_KEY = 'nexgo.driver.permissions.bootstrapped.v1';
+const PERMISSIONS_BOOTSTRAP_KEY = 'nexgo.driver.permissions.bootstrapped.v2';
 
-type PermissionName = 'foregroundLocation' | 'backgroundLocation' | 'mediaLibrary' | 'camera';
+type PermissionName = 'foregroundLocation' | 'mediaLibrary' | 'camera';
 
 type PermissionSummary = Record<PermissionName, boolean | null>;
 
 const initialSummary: PermissionSummary = {
   foregroundLocation: null,
-  backgroundLocation: null,
   mediaLibrary: null,
   camera: null,
 };
@@ -22,22 +20,12 @@ function showSettingsAlert(title: string, message: string) {
   Alert.alert(title, message, [
     { text: 'Not now', style: 'cancel' },
     {
-      text: 'Open Settings',
+      text: 'Go to Settings',
       onPress: () => {
         void Linking.openSettings();
       },
     },
   ]);
-}
-
-function showBackgroundLocationIntro() {
-  return new Promise<void>((resolve) => {
-    Alert.alert(
-      'Allow background location',
-      'NexGO Driver needs background location during online availability and active trips, so passengers and dispatchers can see accurate live ride progress even if the app is not on screen.',
-      [{ text: 'Continue', onPress: () => resolve() }]
-    );
-  });
 }
 
 export function useAppPermissions() {
@@ -59,81 +47,42 @@ export function useAppPermissions() {
         setChecking(false);
         return;
       }
+
       await AsyncStorage.setItem(PERMISSIONS_BOOTSTRAP_KEY, new Date().toISOString());
 
       const nextSummary: PermissionSummary = { ...initialSummary };
 
-      const foreground = await Location.getForegroundPermissionsAsync();
-      const foregroundResult = foreground.granted
-        ? foreground
-        : await Location.requestForegroundPermissionsAsync();
-      nextSummary.foregroundLocation = foregroundResult.granted;
+      const locationResult = await Location.requestForegroundPermissionsAsync();
+      nextSummary.foregroundLocation = locationResult.granted;
 
-      if (!foregroundResult.granted) {
+      if (!locationResult.granted && !locationResult.canAskAgain) {
         showSettingsAlert(
-          'Location permission needed',
-          'NexGO Driver needs location access to show your vehicle on the map, match nearby ride requests, and navigate to passengers. Please allow location access in settings.'
+          'Location access is needed',
+          'NexGO Driver needs your current location to show your vehicle on the map, receive nearby ride requests, and navigate active trips. Please enable Location permission in settings.'
         );
       }
 
-      if (foregroundResult.granted) {
-        const backgroundAvailable = await Location.isBackgroundLocationAvailableAsync();
-        if (backgroundAvailable) {
-          const background = await Location.getBackgroundPermissionsAsync();
-          if (background.granted) {
-            nextSummary.backgroundLocation = true;
-          } else {
-            await showBackgroundLocationIntro();
-            const backgroundResult = await Location.requestBackgroundPermissionsAsync();
-            nextSummary.backgroundLocation = backgroundResult.granted;
-
-            if (!backgroundResult.granted) {
-              showSettingsAlert(
-                'Background location helps live rides',
-                'NexGO Driver uses background location during online availability and active trips so tracking stays accurate if you lock your phone or switch apps. Please allow background location in settings.'
-              );
-            }
-          }
-        } else {
-          nextSummary.backgroundLocation = false;
-        }
-      } else {
-        nextSummary.backgroundLocation = false;
-      }
-
-      const media = await MediaLibrary.getPermissionsAsync();
-      const mediaResult = media.granted
-        ? media
-        : await MediaLibrary.requestPermissionsAsync(false);
+      const mediaResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       nextSummary.mediaLibrary = mediaResult.granted;
 
-      if (!mediaResult.granted) {
+      if (!mediaResult.granted && !mediaResult.canAskAgain) {
         showSettingsAlert(
-          'Photo access needed',
-          'NexGO Driver needs photo access so you can upload profile pictures and required driver documents. Please allow photo access in settings.'
+          'Photo access is needed',
+          'NexGO Driver needs photo access so you can upload driver and vehicle documents from your gallery. Please enable Photos permission in settings.'
         );
       }
 
-      const camera = await Camera.Camera.getCameraPermissionsAsync();
-      const cameraResult = camera.granted
-        ? camera
-        : await Camera.Camera.requestCameraPermissionsAsync();
+      const cameraResult = await ImagePicker.requestCameraPermissionsAsync();
       nextSummary.camera = cameraResult.granted;
 
-      if (!cameraResult.granted) {
+      if (!cameraResult.granted && !cameraResult.canAskAgain) {
         showSettingsAlert(
-          'Camera permission needed',
-          'NexGO Driver needs camera access when you capture profile photos, licenses, insurance, and vehicle documents inside the app. Please allow camera access in settings.'
+          'Camera access is needed',
+          'NexGO Driver needs camera access so you can capture driver and vehicle document photos. Please enable Camera permission in settings.'
         );
       }
 
       setSummary(nextSummary);
-    } catch (error) {
-      console.warn('[Permissions] Unable to request runtime permissions:', error);
-      showSettingsAlert(
-        'Permissions need a fresh build',
-        'NexGO Driver could not open the location permission prompt because the installed app does not include the latest iOS permission descriptions. Please rebuild and reinstall the app, then try again.'
-      );
     } finally {
       setChecking(false);
       hasStartedRef.current = false;

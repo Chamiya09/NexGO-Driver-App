@@ -12,11 +12,8 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Allow NexGO Driver to use your current location for ride matching and navigation.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow NexGO Driver to keep your live ride location updated while trips are active, even when the app is in the background.",
-        "NSLocationAlwaysUsageDescription": "Allow NexGO Driver to keep your live ride location updated while trips are active.",
         "NSCameraUsageDescription": "Allow NexGO Driver to use your camera for profile photos and required driver documents.",
-        "NSPhotoLibraryUsageDescription": "Allow NexGO Driver to access photos for profile pictures and document uploads.",
-        "NSPhotoLibraryAddUsageDescription": "Allow NexGO Driver to save captured document photos."
+        "NSPhotoLibraryUsageDescription": "Allow NexGO Driver to access photos for profile pictures and document uploads."
       }
     },
     "android": {
@@ -38,29 +35,14 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow NexGO Driver to use your current location for ride matching and navigation.",
-          "locationAlwaysAndWhenInUsePermission": "Allow NexGO Driver to keep your live ride location updated while trips are active, even when the app is in the background.",
-          "isAndroidBackgroundLocationEnabled": true,
-          "isAndroidForegroundServiceEnabled": true
-        }
-      ],
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Allow NexGO Driver to use your camera for profile photos and required driver documents."
-        }
-      ],
-      [
-        "expo-media-library",
-        {
-          "photosPermission": "Allow NexGO Driver to access photos for profile pictures and document uploads.",
-          "savePhotosPermission": "Allow NexGO Driver to save captured document photos."
+          "locationWhenInUsePermission": "Allow NexGO Driver to use your current location for ride matching and navigation."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow NexGO Driver to select a profile image from your gallery."
+          "photosPermission": "Allow NexGO Driver to select profile and document images from your gallery.",
+          "cameraPermission": "Allow NexGO Driver to use your camera for required driver and vehicle document photos."
         }
       ],
       [
