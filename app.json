@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "nexgo",
+    "name": "NexGO Driver",
     "slug": "nexgo",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/Driver Dark App Logo.png",
     "scheme": "nexgo",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -18,13 +18,12 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#103F3D",
+        "foregroundImage": "./assets/images/Driver Dark App Logo.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
+      "usesCleartextTraffic": true,
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
@@ -41,7 +40,8 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow NexGO Driver to use your current location for ride matching and navigation."
+          "locationWhenInUsePermission": "Allow NexGO Driver to use your current location for ride matching and navigation.",
+          "locationAlwaysAndWhenInUsePermission": "Allow NexGO to use your location for rides."
         }
       ],
       [
@@ -54,12 +54,12 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
+          "image": "./assets/images/Driver Dark App Logo.png",
+          "imageWidth": 240,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#103F3D",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#103F3D"
           }
         }
       ]
@@ -73,6 +73,12 @@
       "eas": {
         "projectId": "a4fcd738-402d-456f-960d-d203e867870d"
       }
+    }
+    ,
+    "splash": {
+      "image": "./assets/images/Driver Dark App Logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#103F3D"
     }
   }
 }

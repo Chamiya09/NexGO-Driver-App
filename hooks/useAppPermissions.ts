@@ -32,6 +32,7 @@ export function useAppPermissions() {
   const hasStartedRef = useRef(false);
   const [checking, setChecking] = useState(true);
   const [summary, setSummary] = useState<PermissionSummary>(initialSummary);
+  const [error, setError] = useState<unknown>(null);
 
   const requestAllPermissions = useCallback(async ({ force = false } = {}) => {
     if (hasStartedRef.current && !force) {
@@ -42,6 +43,7 @@ export function useAppPermissions() {
     setChecking(true);
 
     try {
+      setError(null);
       const hasBootstrapped = await AsyncStorage.getItem(PERMISSIONS_BOOTSTRAP_KEY);
       if (hasBootstrapped && !force) {
         setChecking(false);
@@ -83,6 +85,13 @@ export function useAppPermissions() {
       }
 
       setSummary(nextSummary);
+    } catch (permissionError) {
+      console.warn('[Permissions] Driver permission bootstrap failed:', permissionError);
+      setError(permissionError);
+      showSettingsAlert(
+        'Permissions could not be checked',
+        'NexGO Driver could not complete the permission check. Please open app settings and confirm Location, Photos, and Camera permissions.'
+      );
     } finally {
       setChecking(false);
       hasStartedRef.current = false;
@@ -100,6 +109,7 @@ export function useAppPermissions() {
 
   return {
     checking,
+    error,
     summary,
     requestAllPermissions,
   };
