@@ -18,12 +18,12 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
-import MapView, { Marker, Polyline, UrlTile, AnimatedRegion } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import driverSocket from '@/lib/driverSocket';
-import { useDriverAuth } from '@/context/driver-auth-context';
-import { MAP_TILE_URL_TEMPLATE } from '@/lib/mapTiles';
+import { type DriverProfile, useDriverAuth } from '@/context/driver-auth-context';
+import { CustomOsmMap, CustomOsmMapRef } from '@/components/CustomOsmMap';
 import { clearDriverActiveRide, saveDriverActiveRide } from '@/lib/activeRideStorage';
+import { VehicleCategoryIcon, getVehicleMarkerUri } from '@/components/VehicleCategoryIcon';
 import {
   DriverRideStage,
   LatLng,
@@ -73,6 +73,7 @@ type RideParams = {
   id?: string;
   status?: string;
   passengerName?: string;
+  passengerImage?: string;
   passengerRating?: string;
   vehicleType?: string;
   price?: string;
@@ -147,7 +148,7 @@ function distanceMeters(a: LatLng, b: LatLng) {
 
 export default function DriverActiveRideScreen() {
   const router = useRouter();
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<CustomOsmMapRef>(null);
   const lastPositionRef = useRef<LatLng | null>(null);
   const cameraHeadingRef = useRef(0);
   const isRotationEnabledRef = useRef(true);
@@ -157,7 +158,9 @@ export default function DriverActiveRideScreen() {
 
   const rideId = params.id ?? '';
   const passengerName = params.passengerName ?? 'Passenger';
+  const passengerImage = params.passengerImage ?? '';
   const passengerRating = params.passengerRating ?? '4.9';
+  const vehicleType = params.vehicleType ?? 'Vehicle';
   const pickupName = params.pName ?? 'Pickup point';
   const dropoffName = params.dName ?? 'Destination';
 
@@ -182,13 +185,6 @@ export default function DriverActiveRideScreen() {
 
   const [driverPosition, setDriverPosition] = useState<LatLng>(initialDriverPosition);
 
-  const animatedDrCoords = useRef(new AnimatedRegion({
-    latitude: initialDriverPosition.latitude,
-    longitude: initialDriverPosition.longitude,
-    latitudeDelta: 0.05,
-    longitudeDelta: 0.05,
-  })).current;
-
   const headingAnim = useRef(new Animated.Value(0)).current;
 
   const [actionStatus, setActionStatus] = useState<RideActionStatus>(normalizeStatus(params.status));
@@ -206,6 +202,7 @@ export default function DriverActiveRideScreen() {
   const [requestedArrivalCode, setRequestedArrivalCode] = useState('');
   const [arrivalCodeError, setArrivalCodeError] = useState('');
   const [tripCompletedVisible, setTripCompletedVisible] = useState(false);
+  const [isColspan, setIsColspan] = useState(false);
   const navigationRouteOriginRef = useRef<LatLng>(initialDriverPosition);
   const hasNavigationOsrmRouteRef = useRef(false);
   const navigationRouteRequestIdRef = useRef(0);
@@ -227,6 +224,7 @@ export default function DriverActiveRideScreen() {
       id: rideId,
       status: actionStatusToParam(actionStatus),
       passengerName,
+      passengerImage,
       passengerRating,
       vehicleType: params.vehicleType ?? '',
       price: params.price ?? '',
@@ -254,6 +252,7 @@ export default function DriverActiveRideScreen() {
     initialDriverPosition.longitude,
     params.price,
     params.vehicleType,
+    passengerImage,
     passengerName,
     passengerRating,
     pickup.latitude,
@@ -466,13 +465,6 @@ export default function DriverActiveRideScreen() {
 
       setDriverPosition(next);
 
-      animatedDrCoords.timing({
-        latitude: next.latitude,
-        longitude: next.longitude,
-        useNativeDriver: false,
-        duration: NAVIGATION_ANIMATION_MS
-      } as Parameters<typeof animatedDrCoords.timing>[0]).start();
-
       if (driver?.id && rideId) {
         driverSocket.emit('updateDriverLocation', {
           driverId: driver.id,
@@ -486,7 +478,7 @@ export default function DriverActiveRideScreen() {
     };
 
     const beginTracking = async () => {
-      const permission = await Location.requestForegroundPermissionsAsync();
+      const permission = await Location.getForegroundPermissionsAsync();
       if (permission.status !== 'granted') return;
 
       headingSub = await Location.watchHeadingAsync((heading) => {
@@ -523,7 +515,9 @@ export default function DriverActiveRideScreen() {
       );
     };
 
-    beginTracking();
+    beginTracking().catch((error) => {
+      console.warn('[ActiveRide] location tracking failed:', error);
+    });
 
     const handleStatusUpdate = (payload: { rideId: string; canonicalStatus?: string; status?: string }) => {
       if (payload.rideId !== rideId) return;
@@ -583,7 +577,7 @@ export default function DriverActiveRideScreen() {
       driverSocket.off('rideError', handleRideError);
       driverSocket.off('arrivalCodeRequested', handleArrivalCodeRequested);
     };
-  }, [animatedDrCoords, driver?.id, driver?.vehicle?.category, dropoff, headingAnim, pickup, rideId, router, stage]);
+  }, [driver?.id, driver?.vehicle?.category, dropoff, headingAnim, pickup, rideId, router, stage]);
 
   const transitionRide = (eventName: 'driver_arrived' | 'start_trip' | 'complete_trip', optimistic: RideActionStatus) => {
     if (!driver?.id || !rideId || isActionBusy) return;
@@ -674,65 +668,43 @@ export default function DriverActiveRideScreen() {
       <Stack.Screen options={{ headerShown: false, gestureEnabled: false }} />
       <StatusBar style="dark" translucent backgroundColor="transparent" />
 
-      <MapView
+      <CustomOsmMap
         ref={mapRef}
         style={StyleSheet.absoluteFill}
-        mapType="none"
         onMapReady={() => setMapReady(true)}
         initialRegion={{
           latitude: initialDriverPosition.latitude || 6.9271,
           longitude: initialDriverPosition.longitude || 79.8612,
           latitudeDelta: 0.06,
           longitudeDelta: 0.06,
-        }}>
-        <UrlTile
-          urlTemplate={MAP_TILE_URL_TEMPLATE}
-          maximumZ={19}
-          flipY={false}
-        />
-
-        {stage === 'TO_PICKUP' && tripRoute.length > 1 && (
-          <Polyline coordinates={tripRoute} strokeWidth={3} strokeColor="rgba(17, 75, 122, 0.28)" lineCap="round" />
-        )}
-
-        {highlightedRoute.length > 1 && (
-          <>
-            <Polyline coordinates={highlightedRoute} strokeWidth={7} strokeColor="#074343" lineCap="round" />
-            <Polyline coordinates={highlightedRoute} strokeWidth={4} strokeColor={stage === 'TO_PICKUP' ? TEAL : DEEP_BLUE} lineCap="round" />
-          </>
-        )}
-
-        <Marker.Animated coordinate={animatedDrCoords as any} anchor={{ x: 0.5, y: 0.5 }} flat>
-          <Animated.View style={[styles.markerBubble, {
-            transform: [{
-              rotate: headingAnim.interpolate({
-                inputRange: [0, 360],
-                outputRange: ['0deg', '360deg']
-              })
-            }]
-          }]}>
-            <Image source={require('@/assets/images/icon.png')} style={styles.driverAsset} />
-          </Animated.View>
-        </Marker.Animated>
-
-        {stage === 'TO_PICKUP' && (
-          <Marker coordinate={pickup} anchor={{ x: 0.5, y: 1 }}>
-            <View style={styles.landmarkCard}>
-              <Image source={require('@/assets/images/android-icon-foreground.png')} style={styles.landmarkAsset} />
-              <Text style={styles.landmarkLabel} numberOfLines={1}>{pickupName}</Text>
-            </View>
-          </Marker>
-        )}
-
-        {stage === 'IN_TRANSIT' && (
-          <Marker coordinate={dropoff} anchor={{ x: 0.5, y: 1 }}>
-            <View style={styles.landmarkCardBlue}>
-              <Image source={require('@/assets/images/splash-icon.png')} style={styles.landmarkAsset} />
-              <Text style={styles.landmarkLabelBlue} numberOfLines={1}>{dropoffName}</Text>
-            </View>
-          </Marker>
-        )}
-      </MapView>
+        }}
+        markers={[
+          {
+            id: 'driver',
+            coordinate: driverPosition,
+            color: TEAL,
+            iconUri: getVehicleMarkerUri(driver?.vehicle?.category ?? vehicleType),
+            heading: cameraHeadingRef.current,
+            kind: 'vehicle',
+            title: passengerName,
+            zIndex: 60,
+          },
+          ...(stage === 'TO_PICKUP'
+            ? [{ id: 'pickup', coordinate: pickup, color: TEAL, kind: 'label' as const, label: pickupName, zIndex: 50 }]
+            : [{ id: 'dropoff', coordinate: dropoff, color: DEEP_BLUE, kind: 'label' as const, label: dropoffName, zIndex: 50 }]),
+        ]}
+        polylines={[
+          ...(stage === 'TO_PICKUP' && tripRoute.length > 1
+            ? [{ id: 'trip-muted', coordinates: tripRoute, color: 'rgba(17, 75, 122, 0.28)', width: 3, opacity: 0.7 }]
+            : []),
+          ...(highlightedRoute.length > 1
+            ? [
+                { id: 'highlight-outer', coordinates: highlightedRoute, color: '#074343', width: 7, opacity: 0.9 },
+                { id: 'highlight-inner', coordinates: highlightedRoute, color: stage === 'TO_PICKUP' ? TEAL : DEEP_BLUE, width: 4, opacity: 1 },
+              ]
+            : []),
+        ]}
+      />
 
       <SafeAreaView pointerEvents="box-none" style={styles.overlayRoot}>
         <View style={styles.hudCard}>
@@ -742,19 +714,26 @@ export default function DriverActiveRideScreen() {
         </View>
       </SafeAreaView>
 
-      <Pressable
-        style={[styles.rotationButton, isRotationEnabled ? styles.rotationButtonActive : styles.rotationButtonInactive]}
-        onPress={handleToggleRotation}
-        accessibilityRole="button"
-        accessibilityLabel={isRotationEnabled ? 'Disable map rotation' : 'Enable map rotation'}>
-        <Ionicons name={isRotationEnabled ? 'navigate-circle' : 'navigate-circle-outline'} size={23} color={isRotationEnabled ? '#FFFFFF' : TEAL} />
-        <Text style={[styles.rotationButtonText, isRotationEnabled ? styles.rotationButtonTextActive : styles.rotationButtonTextInactive]}>
-          {isRotationEnabled ? 'Rotate' : 'North'}
-        </Text>
-      </Pressable>
-
       <View style={styles.sheet}>
-        <View style={styles.sheetHandle} />
+        <Pressable
+          style={styles.sheetHandlePressable}
+          onPress={() => setIsColspan((value) => !value)}
+          accessibilityRole="button"
+          accessibilityLabel={isColspan ? 'Show full details layout' : 'Show passenger only layout'}>
+          <View style={styles.sheetHandle} />
+        </Pressable>
+        <View style={styles.sheetTopRow}>
+          <Pressable
+            style={[styles.rotationButton, isRotationEnabled ? styles.rotationButtonActive : styles.rotationButtonInactive]}
+            onPress={handleToggleRotation}
+            accessibilityRole="button"
+            accessibilityLabel={isRotationEnabled ? 'Disable map rotation' : 'Enable map rotation'}>
+            <Ionicons name={isRotationEnabled ? 'navigate-circle' : 'navigate-circle-outline'} size={18} color={isRotationEnabled ? '#FFFFFF' : TEAL} />
+            <Text style={[styles.rotationButtonText, isRotationEnabled ? styles.rotationButtonTextActive : styles.rotationButtonTextInactive]}>
+              {isRotationEnabled ? 'Rotate' : 'North'}
+            </Text>
+          </Pressable>
+        </View>
 
         {isLoadingRoute ? (
           <View style={styles.loadingRow}>
@@ -763,12 +742,20 @@ export default function DriverActiveRideScreen() {
           </View>
         ) : (
           <>
-            {stage === 'TO_PICKUP' ? (
+            {isColspan || stage === 'TO_PICKUP' ? (
               <>
-                <Text style={styles.sheetTitle}>{passengerName}</Text>
-                <View style={styles.ratingRow}>
-                  <Ionicons name="star" size={16} color="#D79A00" />
-                  <Text style={styles.ratingText}>{passengerRating} Passenger Rating</Text>
+                <View style={styles.passengerHeaderRow}>
+                  <View style={styles.passengerAvatar}>
+                    {passengerImage ? (
+                      <Image source={{ uri: passengerImage }} style={styles.passengerAvatarImage} />
+                    ) : (
+                      <Text style={styles.passengerAvatarText}>{passengerName.trim().charAt(0).toUpperCase() || 'P'}</Text>
+                    )}
+                  </View>
+                  <View style={styles.vehicleTypeChip}>
+                    <VehicleCategoryIcon category={vehicleType} size={28} active />
+                  </View>
+                  <Text style={[styles.sheetTitle, styles.sheetTitleInline]}>{passengerName}</Text>
                 </View>
               </>
             ) : (
@@ -776,6 +763,22 @@ export default function DriverActiveRideScreen() {
                 <Text style={styles.sheetSubtitle}>Destination</Text>
                 <Text style={styles.sheetTitle}>{dropoffName}</Text>
               </>
+            )}
+
+            {!isColspan && (
+              <View style={styles.driverDetailsCard}>
+                <View style={styles.driverDetailsIcon}>
+                  <VehicleCategoryIcon category={driver?.vehicle?.category ?? vehicleType} size={28} active />
+                </View>
+                <View style={styles.driverDetailsText}>
+                  <Text style={styles.driverDetailsTitle}>{driver?.fullName || 'Driver profile'}</Text>
+                  <Text style={styles.driverDetailsMeta} numberOfLines={1}>{formatDriverVehicle(driver)}</Text>
+                </View>
+                <View style={styles.driverPlatePill}>
+                  <Text style={styles.driverPlateLabel}>PLATE</Text>
+                  <Text style={styles.driverPlateText}>{driver?.vehicle?.plateNumber || 'N/A'}</Text>
+                </View>
+              </View>
             )}
 
             <Pressable
@@ -821,12 +824,6 @@ export default function DriverActiveRideScreen() {
             <Text style={styles.codeTitle}>Confirm Passenger</Text>
             <Text style={styles.codeSubtitle}>Ask the passenger for their 6-digit code before starting the trip.</Text>
 
-            {!!requestedArrivalCode && (
-              <View style={styles.generatedCodeBox}>
-                <Text style={styles.generatedCodeLabel}>Passenger code</Text>
-                <Text style={styles.generatedCodeValue}>{requestedArrivalCode}</Text>
-              </View>
-            )}
 
             <TextInput
               value={arrivalCode}
@@ -888,6 +885,14 @@ export default function DriverActiveRideScreen() {
   );
 }
 
+function formatDriverVehicle(driver?: DriverProfile | null) {
+  const vehicle = driver?.vehicle;
+  if (!vehicle) return 'Vehicle not added';
+
+  const parts = [vehicle.color, vehicle.make, vehicle.model].filter(Boolean);
+  return parts.length ? parts.join(' ') : vehicle.category;
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#DFEEEC' },
   overlayRoot: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30, paddingHorizontal: 18 },
@@ -905,23 +910,30 @@ const styles = StyleSheet.create({
   hudPrimary: { color: '#FFFFFF', fontSize: 35, fontWeight: '900', lineHeight: 40 },
   hudSecondary: { color: '#D9F0EE', fontSize: 17, fontWeight: '700' },
   rotationButton: {
-    position: 'absolute',
-    right: 18,
-    bottom: 170,
-    minHeight: 46,
-    borderRadius: 23,
-    paddingHorizontal: 12,
+    minHeight: 32,
+    borderRadius: 16,
+    paddingHorizontal: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 4,
     borderWidth: 1,
     shadowColor: '#001F1E',
-    shadowOpacity: 0.16,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 8,
+    elevation: 6,
     zIndex: 35,
+  },
+  sheetTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  sheetHandlePressable: {
+    alignSelf: 'center',
   },
   rotationButtonActive: {
     backgroundColor: TEAL,
@@ -932,7 +944,7 @@ const styles = StyleSheet.create({
     borderColor: '#D9E9E6',
   },
   rotationButtonText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '900',
   },
   rotationButtonTextActive: {
@@ -941,6 +953,7 @@ const styles = StyleSheet.create({
   rotationButtonTextInactive: {
     color: TEAL,
   },
+  
 
   markerBubble: {
     width: 46,
@@ -1004,8 +1017,69 @@ const styles = StyleSheet.create({
   },
   sheetSubtitle: { color: '#5D7F7D', fontSize: 13, fontWeight: '700' },
   sheetTitle: { color: '#0D302F', fontSize: 27, fontWeight: '900', marginTop: 6 },
+  sheetTitleInline: { flex: 1, marginTop: 0 },
+  passengerHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 11, marginTop: 6 },
+  passengerAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#E7F5F3',
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  passengerAvatarImage: { width: '100%', height: '100%' },
+  passengerAvatarText: { color: TEAL, fontSize: 19, fontWeight: '900' },
+  vehicleTypeChip: {
+    width: 42,
+    height: 34,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#F7FBFA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
   ratingRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 6 },
   ratingText: { color: '#406866', fontWeight: '700' },
+  driverDetailsCard: {
+    minHeight: 62,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#F7FBFA',
+    padding: 10,
+    marginTop: 14,
+    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  driverDetailsIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#E7F5F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  driverDetailsText: { flex: 1, minWidth: 0 },
+  driverDetailsTitle: { color: '#0D302F', fontSize: 14, fontWeight: '900' },
+  driverDetailsMeta: { color: '#5D7F7D', fontSize: 12, fontWeight: '700', marginTop: 2 },
+  driverPlatePill: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#CFE6E3',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+  driverPlateLabel: { color: '#8CA1A0', fontSize: 8, fontWeight: '900' },
+  driverPlateText: { color: TEAL, fontSize: 11, fontWeight: '900', marginTop: 1 },
   primaryAction: {
     marginTop: 18,
     borderRadius: 24,
@@ -1078,7 +1152,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 14,
   },
-  codeTitle: { fontSize: 22, fontWeight: '900', color: '#102A28', marginBottom: 8 },
+  codeTitle: { fontSize: 22, fontWeight: '900', color: '#102A28', marginBottom: 8, textAlign: 'left', alignSelf: 'stretch' },
   codeSubtitle: { fontSize: 14, fontWeight: '700', color: '#617C79', textAlign: 'center', lineHeight: 20, marginBottom: 18 },
   codeInput: {
     width: '100%',

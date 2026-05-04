@@ -19,6 +19,7 @@ export type RideNotification = {
   rideId: string;
   passengerId: string;
   passengerName: string;
+  passengerImage?: string;
   vehicleType: string;
   price: number;
   pickup: { latitude: number; longitude: number; name?: string };

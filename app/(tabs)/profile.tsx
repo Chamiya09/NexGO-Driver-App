@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
-  Alert,
+  Image,
   Platform,
   Pressable,
   SafeAreaView,
@@ -14,7 +14,9 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import RefreshableScrollView from '@/components/RefreshableScrollView';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useDriverAuth } from '@/context/driver-auth-context';
+import { useResponsiveLayout } from '@/lib/responsive';
 
 const teal = '#008080';
 
@@ -90,6 +92,9 @@ const baseProfileSections: ProfileSection[] = [
 
 export default function DriverProfileScreen() {
   const { driver, logout, refreshDriver } = useDriverAuth();
+  const responsive = useResponsiveLayout();
+  const [logoutConfirmVisible, setLogoutConfirmVisible] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const fullName = driver?.fullName || 'NexGO Driver';
   const documents = driver?.documents || [];
@@ -117,30 +122,24 @@ export default function DriverProfileScreen() {
   );
 
   const confirmLogout = () => {
-    Alert.alert('Log out', 'Do you want to sign out of this driver device?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Log out',
-        style: 'destructive',
-        onPress: () => {
-          logout();
-          router.replace('/login');
-        },
-      },
-    ]);
+    setLogoutConfirmVisible(true);
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
       <RefreshableScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[styles.container, { paddingHorizontal: responsive.screenPadding }]}
         showsVerticalScrollIndicator={false}
         onRefreshPage={refreshDriver}>
-        <View style={styles.heroCard}>
+        <View style={[styles.heroCard, { padding: responsive.cardPadding }]}>
           <View style={styles.profileHead}>
             <View style={styles.avatarCircle}>
-              <Text style={styles.avatarInitials}>{initials || 'D'}</Text>
+              {driver?.profileImageUrl ? (
+                <Image source={{ uri: driver.profileImageUrl }} style={styles.avatarImage} />
+              ) : (
+                <Text style={styles.avatarInitials}>{initials || 'D'}</Text>
+              )}
             </View>
             <Text style={styles.profileName}>{fullName}</Text>
             <Text style={styles.memberCaption}>{driver?.email || 'NexGO Driver account'}</Text>
@@ -148,7 +147,7 @@ export default function DriverProfileScreen() {
 
           <View style={styles.metricsRow}>
             {profileMetrics.map((metric) => (
-              <View key={metric.label} style={styles.metricItem}>
+              <View key={metric.label} style={[styles.metricItem, { minWidth: responsive.metricMinWidth }]}>
                 <Ionicons name={metric.icon} size={16} color={teal} />
                 <Text style={styles.metricValue}>{metric.value}</Text>
                 <Text style={styles.metricLabel}>{metric.label}</Text>
@@ -218,6 +217,28 @@ export default function DriverProfileScreen() {
           <Text style={styles.footerBottom}>Version 1.0.0 (driver foundation)</Text>
         </View>
       </RefreshableScrollView>
+      <ConfirmDialog
+        visible={logoutConfirmVisible}
+        title="Log out"
+        message="Do you want to sign out of this driver device?"
+        confirmLabel="Log out"
+        destructive
+        loading={loggingOut}
+        icon="log-out-outline"
+        onCancel={() => {
+          if (!loggingOut) setLogoutConfirmVisible(false);
+        }}
+        onConfirm={async () => {
+          setLoggingOut(true);
+          try {
+            await logout();
+            setLogoutConfirmVisible(false);
+            router.replace('/login');
+          } finally {
+            setLoggingOut(false);
+          }
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -229,7 +250,6 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
   },
   container: {
-    paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 34,
   },
@@ -238,7 +258,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#D9E9E6',
     backgroundColor: '#FFFFFF',
-    padding: 16,
     marginBottom: 18,
   },
   profileHead: {
@@ -255,6 +274,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#D9E9E6',
     backgroundColor: '#E7F5F3',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   avatarInitials: {
     color: teal,
@@ -274,6 +298,7 @@ const styles = StyleSheet.create({
   },
   metricsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
     marginBottom: 14,
   },

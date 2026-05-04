@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -18,7 +17,10 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import RefreshableScrollView from '@/components/RefreshableScrollView';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { VehicleCategoryIcon } from '@/components/VehicleCategoryIcon';
 import { type DriverVehicle, useDriverAuth } from '@/context/driver-auth-context';
+import { useResponsiveLayout } from '@/lib/responsive';
 
 const teal = '#008080';
 
@@ -50,12 +52,14 @@ const initialVehicleForm: VehicleForm = {
 
 export default function DriverVehicleDetailsScreen() {
   const { driver, createVehicle, updateVehicle, deleteVehicle, getVehicle } = useDriverAuth();
+  const responsive = useResponsiveLayout();
   const [form, setForm] = useState<VehicleForm>(initialVehicleForm);
   const [modalMode, setModalMode] = useState<VehicleModalMode>('add');
   const [isVehicleModalVisible, setIsVehicleModalVisible] = useState(false);
   const [isVehicleLoading, setIsVehicleLoading] = useState(false);
   const [isSavingVehicle, setIsSavingVehicle] = useState(false);
   const [isDeletingVehicle, setIsDeletingVehicle] = useState(false);
+  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const vehicle = driver?.vehicle || null;
@@ -185,12 +189,10 @@ export default function DriverVehicleDetailsScreen() {
   };
 
   const confirmDeleteVehicle = () => {
-    Alert.alert('Delete vehicle', 'Do you want to remove this vehicle from your driver profile?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
+    setDeleteConfirmVisible(true);
+  };
+
+  const handleDeleteVehicle = async () => {
           setIsDeletingVehicle(true);
           setErrorMessage(null);
           setSuccessMessage(null);
@@ -204,9 +206,6 @@ export default function DriverVehicleDetailsScreen() {
           } finally {
             setIsDeletingVehicle(false);
           }
-        },
-      },
-    ]);
   };
 
   return (
@@ -214,7 +213,7 @@ export default function DriverVehicleDetailsScreen() {
       <StatusBar style="dark" />
       <KeyboardAvoidingView style={styles.keyboardWrap} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <RefreshableScrollView
-          contentContainerStyle={styles.container}
+          contentContainerStyle={[styles.container, { paddingHorizontal: responsive.screenPadding }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           onRefreshPage={() => loadVehicle({ showSuccess: true })}>
@@ -226,7 +225,7 @@ export default function DriverVehicleDetailsScreen() {
             <View style={styles.topBarSpacer} />
           </View>
 
-          <View style={styles.heroCard}>
+          <View style={[styles.heroCard, { padding: responsive.cardPadding }]}>
             <View style={styles.heroTopRow}>
               <View style={styles.heroIcon}>
                 <Ionicons name="car-sport-outline" size={28} color={teal} />
@@ -298,7 +297,7 @@ export default function DriverVehicleDetailsScreen() {
                 <View style={styles.vehicleCardHeader}>
                   <View style={styles.vehicleHeaderLeft}>
                     <View style={styles.vehicleIconBadge}>
-                      <Ionicons name="car-sport-outline" size={24} color={teal} />
+                      <VehicleCategoryIcon category={vehicle.category} size={34} active />
                     </View>
 
                     <View style={styles.vehicleTitleWrap}>
@@ -351,7 +350,7 @@ export default function DriverVehicleDetailsScreen() {
               contentContainerStyle={styles.modalScrollContent}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}>
-              <View style={styles.modalCard}>
+              <View style={[styles.modalCard, { padding: responsive.cardPadding }]}>
                 <View style={styles.modalHeader}>
                   <View>
                     <Text style={styles.modalTitle}>{modalMode === 'edit' ? 'Update Vehicle' : 'Add Vehicle'}</Text>
@@ -381,6 +380,9 @@ export default function DriverVehicleDetailsScreen() {
                         key={category}
                         style={[styles.categoryPill, isSelected && styles.categoryPillActive]}
                         onPress={() => updateField('category', category)}>
+                        <View style={[styles.categoryIconWrap, isSelected && styles.categoryIconWrapActive]}>
+                          <VehicleCategoryIcon category={category} size={28} active={isSelected} />
+                        </View>
                         <Text style={[styles.categoryPillText, isSelected && styles.categoryPillTextActive]}>{category}</Text>
                       </Pressable>
                     );
@@ -431,6 +433,22 @@ export default function DriverVehicleDetailsScreen() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
+      <ConfirmDialog
+        visible={deleteConfirmVisible}
+        title="Delete vehicle"
+        message="Do you want to remove this vehicle from your driver profile?"
+        confirmLabel="Delete"
+        destructive
+        loading={isDeletingVehicle}
+        icon="trash-outline"
+        onCancel={() => {
+          if (!isDeletingVehicle) setDeleteConfirmVisible(false);
+        }}
+        onConfirm={async () => {
+          await handleDeleteVehicle();
+          setDeleteConfirmVisible(false);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -513,7 +531,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   container: {
-    paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 28,
   },
@@ -547,8 +564,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#D9E9E6',
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
     marginBottom: 12,
   },
   heroTopRow: {
@@ -675,19 +690,36 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   categoryPill: {
-    minHeight: 36,
-    minWidth: 62,
-    borderRadius: 10,
+    flexGrow: 1,
+    flexBasis: 92,
+    minHeight: 72,
+    minWidth: 82,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#D9E9E6',
     backgroundColor: '#F7FBFA',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
+    gap: 6,
   },
   categoryPillActive: {
     borderColor: teal,
     backgroundColor: '#E7F5F3',
+  },
+  categoryIconWrap: {
+    width: 44,
+    height: 34,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categoryIconWrapActive: {
+    borderColor: '#CFE4E0',
+    backgroundColor: '#FFFFFF',
   },
   categoryPillText: {
     color: '#617C79',
@@ -960,7 +992,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#D9E9E6',
     backgroundColor: '#FFFFFF',
-    padding: 14,
   },
   modalHeader: {
     flexDirection: 'row',

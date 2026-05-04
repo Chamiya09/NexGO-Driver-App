@@ -28,7 +28,7 @@ export async function pickDriverPdf(): Promise<PickedDriverDocument | null> {
 }
 
 export async function pickDriverImage(): Promise<PickedDriverDocument | null> {
-  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  const permission = await ImagePicker.getMediaLibraryPermissionsAsync();
   if (!permission.granted) {
     throw new Error('Photo library permission is required to upload an image.');
   }
@@ -53,7 +53,7 @@ export async function pickDriverImage(): Promise<PickedDriverDocument | null> {
 }
 
 export async function captureDriverDocumentImage(): Promise<PickedDriverDocument | null> {
-  const permission = await ImagePicker.requestCameraPermissionsAsync();
+  const permission = await ImagePicker.getCameraPermissionsAsync();
   if (!permission.granted) {
     throw new Error('Camera permission is required to take a document photo.');
   }

@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { API_BASE_URL, parseApiResponse } from '@/lib/api';
-import { clearDriverToken, getDriverToken, setDriverToken } from '@/lib/driver-session';
+import { clearDriverToken, loadDriverToken, setDriverToken } from '@/lib/driver-session';
 
 export type DriverDocument = {
   documentType: 'license' | 'insurance' | 'registration';
@@ -104,20 +104,22 @@ type DriverAuthContextValue = {
   deleteVehicle: () => Promise<void>;
   updateDocument: (documentType: DriverDocument['documentType'], fileUrl: string) => Promise<void>;
   updateSecurity: (twoStepVerificationEnabled: boolean) => Promise<void>;
-  logout: () => void;
+  applyStatus: (status: string) => void;
+  logout: () => Promise<void>;
 };
 
 const DriverAuthContext = createContext<DriverAuthContextValue | null>(null);
 
 export function DriverAuthProvider({ children }: { children: React.ReactNode }) {
   const [driver, setDriver] = useState<DriverProfile | null>(null);
-  const [token, setToken] = useState<string | null>(() => getDriverToken());
+  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [hydrating, setHydrating] = useState(true);
 
-  const persistAuth = (nextToken: string, nextDriver: DriverProfile) => {
+  const persistAuth = async (nextToken: string, nextDriver: DriverProfile) => {
     setToken(nextToken);
     setDriver(nextDriver);
-    setDriverToken(nextToken);
+    await setDriverToken(nextToken);
   };
 
   const getRequestErrorMessage = (error: unknown, fallbackMessage: string) => {
@@ -140,11 +142,12 @@ export function DriverAuthProvider({ children }: { children: React.ReactNode }) 
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ email, password }),
       });
 
       const data = await parseApiResponse<AuthResponse>(response);
-      persistAuth(data.token, data.driver);
+      await persistAuth(data.token, data.driver);
     } catch (error) {
       throw new Error(getRequestErrorMessage(error, 'Login failed'));
     } finally {
@@ -160,11 +163,12 @@ export function DriverAuthProvider({ children }: { children: React.ReactNode }) 
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ fullName, email, phoneNumber, password }),
       });
 
       const data = await parseApiResponse<AuthResponse>(response);
-      persistAuth(data.token, data.driver);
+      await persistAuth(data.token, data.driver);
     } catch (error) {
       throw new Error(getRequestErrorMessage(error, 'Registration failed'));
     } finally {
@@ -331,21 +335,71 @@ export function DriverAuthProvider({ children }: { children: React.ReactNode }) 
     setDriver(data.driver);
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await fetch(`${API_BASE_URL}/driver-auth/logout`, { method: 'POST' });
+    } catch {
+      // Ignore logout network errors and clear local session anyway.
+    }
+
     setDriver(null);
     setToken(null);
-    clearDriverToken();
+    await clearDriverToken();
+  };
+
+  const applyStatus = (status: string) => {
+    setDriver((current) => (current ? { ...current, status } : current));
   };
 
   useEffect(() => {
-    if (!token) {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const storedToken = await loadDriverToken();
+        if (!mounted) return;
+
+        if (storedToken) {
+          setToken(storedToken);
+          const response = await fetch(`${API_BASE_URL}/driver-auth/me`, {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${storedToken}`,
+            },
+          });
+
+          const data = await parseApiResponse<DriverResponse>(response);
+          if (mounted) {
+            setDriver(data.driver);
+          }
+        }
+      } catch {
+        await clearDriverToken();
+        if (mounted) {
+          setToken(null);
+          setDriver(null);
+        }
+      } finally {
+        if (mounted) {
+          setHydrating(false);
+        }
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!token || hydrating) {
       return;
     }
 
     refreshDriver().catch(() => {
-      logout();
+      void logout();
     });
-  }, [token]);
+  }, [token, hydrating]);
 
   const value = useMemo(
     () => ({
@@ -363,12 +417,17 @@ export function DriverAuthProvider({ children }: { children: React.ReactNode }) 
       deleteVehicle,
       updateDocument,
       updateSecurity,
+      applyStatus,
       logout,
     }),
-    [driver, token, loading]
+    [driver, token, loading, hydrating]
   );
 
-  return <DriverAuthContext.Provider value={value}>{children}</DriverAuthContext.Provider>;
+  return (
+    <DriverAuthContext.Provider value={{ ...value, loading: loading || hydrating }}>
+      {children}
+    </DriverAuthContext.Provider>
+  );
 }
 
 export function useDriverAuth() {

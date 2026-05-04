@@ -10,6 +10,7 @@ import React, {
 } from 'react';
 import {
   Animated,
+  Image,
   Platform,
   StatusBar as RNStatusBar,
   StyleSheet,
@@ -18,6 +19,8 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+
+import { VehicleCategoryIcon } from './VehicleCategoryIcon';
 
 const teal = '#008080';
 
@@ -28,6 +31,7 @@ export type RideNotificationData = {
   rideId: string;
   passengerId: string;
   passengerName: string;
+  passengerImage?: string;
   vehicleType: string;
   price: number;
   pickup: Coords;
@@ -132,7 +136,11 @@ export const NotificationAlert = forwardRef<NotificationAlertRef, Props>(
         <TouchableOpacity activeOpacity={0.9} style={styles.inner} onPress={handlePress}>
           {/* Green icon bubble */}
           <View style={styles.iconBubble}>
-            <Ionicons name="car-sport" size={22} color="#FFF" />
+            {rideData?.passengerImage ? (
+              <Image source={{ uri: rideData.passengerImage }} style={styles.avatarImage} />
+            ) : (
+              <Ionicons name="car-sport" size={22} color="#FFF" />
+            )}
           </View>
 
           {/* Text */}
@@ -141,9 +149,14 @@ export const NotificationAlert = forwardRef<NotificationAlertRef, Props>(
               <View style={styles.pingDot} />
               <Text style={styles.eyebrow}>NEW RIDE REQUEST</Text>
             </View>
-            <Text style={styles.title} numberOfLines={1}>
-              {rideData?.vehicleType ?? '—'} · {rideData?.passengerName ?? '—'}
-            </Text>
+            <View style={styles.titleRow}>
+              <View style={styles.vehicleChip}>
+                <VehicleCategoryIcon category={rideData?.vehicleType} size={24} active />
+              </View>
+              <Text style={styles.title} numberOfLines={1}>
+                {rideData?.vehicleType ?? '—'} · {rideData?.passengerName ?? '—'}
+              </Text>
+            </View>
             <Text style={styles.sub} numberOfLines={1}>
               📍 {distanceLabel} · LKR {(rideData?.price ?? 0).toLocaleString()}
             </Text>
@@ -210,12 +223,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   textBlock: { flex: 1 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
   pingDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#27AE60' },
   eyebrow: { fontSize: 10, fontWeight: '900', color: '#27AE60', letterSpacing: 0.5 },
-  title:   { fontSize: 14, fontWeight: '900', color: '#102A28', marginBottom: 2 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 2 },
+  vehicleChip: {
+    width: 32,
+    height: 26,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#F7FBFA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  title:   { flex: 1, fontSize: 14, fontWeight: '900', color: '#102A28' },
   sub:     { fontSize: 12, fontWeight: '600', color: '#617C79', marginBottom: 3 },
   cta:     { fontSize: 11, fontWeight: '800', color: teal },
   arrowChip: {

@@ -437,9 +437,6 @@ export default function DriverTripsScreen() {
           <Text style={styles.eyebrow}>TRIPS</Text>
           <Text style={styles.title}>Ride Activity</Text>
         </View>
-        <TouchableOpacity style={styles.refreshBtn} onPress={() => fetchRides(true)}>
-          <Ionicons name="refresh-outline" size={20} color={teal} />
-        </TouchableOpacity>
       </View>
 
       {/* Summary chips */}
@@ -578,13 +575,6 @@ const styles = StyleSheet.create({
     color: '#102A28',
     fontSize: 26,
     fontWeight: '900',
-  },
-  refreshBtn: {
-    width: 40, height: 40, borderRadius: 12,
-    backgroundColor: '#E7F5F3',
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: '#D9E9E6',
-    marginTop: 4,
   },
   summaryRow: {
     flexDirection: 'row',

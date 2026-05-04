@@ -12,11 +12,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import MapView, { Marker, UrlTile } from 'react-native-maps';
 import { useDriverAuth } from '@/context/driver-auth-context';
 import { useNotifications } from '@/context/notifications-context';
 import driverSocket from '@/lib/driverSocket';
-import { MAP_TILE_URL_TEMPLATE } from '@/lib/mapTiles';
+import { CustomOsmMap, CustomOsmMapRef } from '@/components/CustomOsmMap';
+import { getVehicleMarkerUri } from '@/components/VehicleCategoryIcon';
+import { fetchDriverStats, formatLkr, formatRating, type DriverStats } from '@/lib/driver-stats';
 import {
   NotificationAlert,
   NotificationAlertRef,
@@ -34,6 +35,7 @@ const teal = '#008080';
 type PassengerPin = {
   rideId: string;
   passengerName: string;
+  passengerImage?: string;
   vehicleType: string;
   price: number;
   pickup: RideNotificationData['pickup'];
@@ -43,15 +45,16 @@ type PassengerPin = {
 };
 
 export default function DriverHomeScreen() {
-  const { driver } = useDriverAuth();
+  const { driver, token } = useDriverAuth();
   const router = useRouter();
   const { addNotification, removeNotification, clearAll } = useNotifications();
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<CustomOsmMapRef>(null);
   const alertRef = useRef<NotificationAlertRef>(null);
 
   const [isOnline, setIsOnline] = useState(false);
   const [socketOk, setSocketOk] = useState(driverSocket.connected);
   const [passengerPins, setPassengerPins] = useState<PassengerPin[]>([]);
+  const [driverStats, setDriverStats] = useState<DriverStats | null>(null);
   const isOnlineRef = useRef(false);
   const driverCoordsRef = useRef<{ latitude: number; longitude: number } | null>(null);
   const hydratedOnlineRef = useRef(false);
@@ -70,29 +73,57 @@ export default function DriverHomeScreen() {
     setIsOnline(driver.isOnline);
   }, [driver?.isOnline]);
 
+  useEffect(() => {
+    if (!token) {
+      setDriverStats(null);
+      return;
+    }
+
+    let mounted = true;
+    fetchDriverStats(token)
+      .then((stats) => {
+        if (mounted) {
+          setDriverStats(stats);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setDriverStats(null);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [token]);
+
   // ── Setup Location ───────────────────────────────────────────────────────
   useEffect(() => {
     let watchSubscription: Location.LocationSubscription | null = null;
     (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        console.log('[Driver] Permission to access location was denied');
-        return;
-      }
-      // Get initial pos immediately to show map fast
-      let initPos = await Location.getCurrentPositionAsync({});
-      setDriverCoords({ latitude: initPos.coords.latitude, longitude: initPos.coords.longitude });
-
-      watchSubscription = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 5000,
-          distanceInterval: 10,
-        },
-        (loc) => {
-          setDriverCoords({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+      try {
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          console.log('[Driver] Permission to access location was denied');
+          return;
         }
-      );
+        // Get initial pos immediately to show map fast
+        const initPos = await Location.getCurrentPositionAsync({});
+        setDriverCoords({ latitude: initPos.coords.latitude, longitude: initPos.coords.longitude });
+
+        watchSubscription = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.High,
+            timeInterval: 5000,
+            distanceInterval: 10,
+          },
+          (loc) => {
+            setDriverCoords({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+          }
+        );
+      } catch (error) {
+        console.warn('[Driver] Location setup failed:', error);
+      }
     })();
     return () => { watchSubscription?.remove(); };
   }, []);
@@ -160,6 +191,7 @@ export default function DriverHomeScreen() {
         rideId: rideData.rideId,
         passengerId: rideData.passengerId,
         passengerName: rideData.passengerName,
+        passengerImage: rideData.passengerImage,
         vehicleType: rideData.vehicleType,
         price: rideData.price,
         pickup: rideData.pickup,
@@ -175,6 +207,7 @@ export default function DriverHomeScreen() {
           {
             rideId: rideData.rideId,
             passengerName: rideData.passengerName,
+            passengerImage: rideData.passengerImage,
             vehicleType: rideData.vehicleType,
             price: rideData.price,
             pickup: rideData.pickup,
@@ -240,6 +273,7 @@ export default function DriverHomeScreen() {
       params: {
         id: data.rideId,
         passengerName: data.passengerName,
+        passengerImage: data.passengerImage ?? '',
         vehicleType: data.vehicleType,
         price: String(data.price),
         pLat: String(data.pickup.latitude),
@@ -268,74 +302,60 @@ export default function DriverHomeScreen() {
     <View style={styles.root}>
       <StatusBar style="dark" translucent backgroundColor="transparent" />
 
-      {/* ── Real MapView ── */}
+      {/* OSM live map */}
       {driverCoords && (
-        <MapView
+        <CustomOsmMap
           ref={mapRef}
           style={StyleSheet.absoluteFillObject}
-          mapType="none"
-          loadingEnabled={true}
-          loadingBackgroundColor="#EAE6DF"
-          loadingIndicatorColor="#169F95"
-          showsUserLocation={false}
-          showsMyLocationButton={false}
           initialRegion={{
             ...driverCoords,
             latitudeDelta: 0.025,
             longitudeDelta: 0.025,
-          }}>
-          <UrlTile
-            urlTemplate={MAP_TILE_URL_TEMPLATE}
-            maximumZ={19}
-            flipY={false}
-          />
+          }}
+          markers={[
+            {
+              id: 'driver',
+              coordinate: driverCoords,
+              color: teal,
+              iconUri: getVehicleMarkerUri(driver?.vehicle?.category),
+              kind: 'vehicle',
+              title: 'Your location',
+              zIndex: 50,
+            },
+            ...passengerPins.map((pin) => ({
+              id: pin.rideId,
+              coordinate: { latitude: pin.latitude, longitude: pin.longitude },
+              color: '#27AE60',
+              kind: 'label' as const,
+              label: pin.passengerName.split(' ')[0] || 'Passenger',
+              title: pin.passengerName,
+              zIndex: 40,
+            })),
+          ]}
+          onMarkerPress={(markerId) => {
+            const pin = passengerPins.find((item) => item.rideId === markerId);
+            if (!pin) return;
+            router.push({
+              pathname: '/ride-preview/[id]',
+              params: {
+                id: pin.rideId,
+                passengerName: pin.passengerName,
+                passengerImage: pin.passengerImage ?? '',
+                vehicleType: pin.vehicleType,
+                price: String(pin.price),
+                pLat: String(pin.pickup.latitude),
+                pLng: String(pin.pickup.longitude),
+                pName: pin.pickup.name ?? '',
+                dLat: String(pin.dropoff.latitude),
+                dLng: String(pin.dropoff.longitude),
+                dName: pin.dropoff.name ?? '',
+                ...(driverCoords && { drLat: String(driverCoords.latitude), drLng: String(driverCoords.longitude) }),
+              },
+            });
+          }}
+        />
 
-          {/* ── Driver position marker ── */}
-          <Marker coordinate={driverCoords} anchor={{ x: 0.5, y: 0.5 }}>
-            <View style={styles.driverPin}>
-              <Ionicons name="car-sport" size={18} color="#FFF" />
-            </View>
-          </Marker>
 
-          {/* ── Passenger pickup markers (one per incoming ride) ── */}
-          {passengerPins.map((pin) => (
-            <Marker
-              key={pin.rideId}
-              coordinate={{ latitude: pin.latitude, longitude: pin.longitude }}
-              anchor={{ x: 0.5, y: 1 }}
-              onPress={() =>
-                router.push({
-                  pathname: '/ride-preview/[id]',
-                  params: {
-                    id: pin.rideId,
-                    passengerName: pin.passengerName,
-                    vehicleType: pin.vehicleType,
-                    price: String(pin.price),
-                    pLat: String(pin.pickup.latitude),
-                    pLng: String(pin.pickup.longitude),
-                    pName: pin.pickup.name ?? '',
-                    dLat: String(pin.dropoff.latitude),
-                    dLng: String(pin.dropoff.longitude),
-                    dName: pin.dropoff.name ?? '',
-                    ...(driverCoords && { drLat: String(driverCoords.latitude), drLng: String(driverCoords.longitude) })
-                  },
-                })
-              }>
-              {/* Custom passenger pin */}
-              <View style={styles.passengerPinWrap}>
-                <View style={styles.passengerPin}>
-                  <Ionicons name="person" size={14} color="#FFF" />
-                </View>
-                <View style={styles.passengerPinLabel}>
-                  <Text style={styles.passengerPinText} numberOfLines={1}>
-                    {pin.passengerName.split(' ')[0]}
-                  </Text>
-                </View>
-                <View style={styles.passengerPinPointer} />
-              </View>
-            </Marker>
-          ))}
-        </MapView>
       )}
 
       {/*
@@ -349,7 +369,7 @@ export default function DriverHomeScreen() {
         {/* Top bar */}
         <View style={styles.topBar}>
           <View style={styles.topBarLeft}>
-            <Text style={styles.greeting}>NexGO Driver</Text>
+            <Text style={styles.greeting}>{driver?.fullName || 'NexGO Driver'}</Text>
             <View style={styles.subRow}>
               <View style={[styles.connDot, socketOk ? styles.connDotOn : styles.connDotOff]} />
               <Text style={styles.subtext}>
@@ -404,9 +424,9 @@ export default function DriverHomeScreen() {
         </View>
 
         <View style={styles.metricRow}>
-          <MetricTile icon="cash-outline" value="LKR 8,420" label="Earnings" />
-          <MetricTile icon="checkmark-done-outline" value="12" label="Rides Done" />
-          <MetricTile icon="star-outline" value="4.9" label="Rating" />
+          <MetricTile icon="cash-outline" value={formatLkr(driverStats?.todayEarnings ?? 0)} label="Today" />
+          <MetricTile icon="checkmark-done-outline" value={String(driverStats?.completedRides ?? 0)} label="Rides Done" />
+          <MetricTile icon="star-outline" value={formatRating(driverStats?.averageRating ?? null)} label="Rating" />
         </View>
       </View>
     </View>

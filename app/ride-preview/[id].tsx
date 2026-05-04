@@ -6,16 +6,17 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
 import { Feather, Ionicons } from '@expo/vector-icons';
-import { useDriverAuth } from '@/context/driver-auth-context';
+import { type DriverProfile, useDriverAuth } from '@/context/driver-auth-context';
 import { useNotifications } from '@/context/notifications-context';
 import driverSocket from '@/lib/driverSocket';
-import { MAP_TILE_URL_TEMPLATE } from '@/lib/mapTiles';
+import { CustomOsmMap, CustomOsmMapRef } from '@/components/CustomOsmMap';
+import { VehicleCategoryIcon, getVehicleMarkerUri } from '@/components/VehicleCategoryIcon';
 
 const teal = '#008080';
 
@@ -52,7 +53,7 @@ function createDirectRoute(from: LatLng, to: LatLng): RouteState {
   };
 }
 
-function fitRoute(map: MapView | null, route: RouteState, animated = true, delayMs = 0) {
+function fitRoute(map: CustomOsmMapRef | null, route: RouteState, animated = true, delayMs = 0) {
   if (!route?.coords.length) return;
 
   const fit = () => {
@@ -65,6 +66,14 @@ function fitRoute(map: MapView | null, route: RouteState, animated = true, delay
   if (delayMs > 0) setTimeout(fit, delayMs);
   else fit();
 }
+function formatDriverVehicle(driver?: DriverProfile | null) {
+  const vehicle = driver?.vehicle;
+  if (!vehicle) return 'Vehicle not added';
+
+  const parts = [vehicle.color, vehicle.make, vehicle.model].filter(Boolean);
+  return parts.length ? parts.join(' ') : vehicle.category;
+}
+
 type MapMode = 'navigate' | 'trip';  // navigate = driver→pickup | trip = pickup→dropoff
 
 // ── OSRM route fetcher ────────────────────────────────────────────────────────
@@ -94,11 +103,12 @@ export default function RidePreviewScreen() {
   const router = useRouter();
   const { driver } = useDriverAuth();
   const { removeNotification } = useNotifications();
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<CustomOsmMapRef>(null);
 
   const params = useLocalSearchParams<{
     id: string;
     passengerName: string;
+    passengerImage?: string;
     vehicleType: string;
     price: string;
     pLat: string; pLng: string; pName: string;
@@ -109,6 +119,7 @@ export default function RidePreviewScreen() {
 
   const rideId       = params.id;
   const passengerName = params.passengerName ?? 'Passenger';
+  const passengerImage = params.passengerImage ?? '';
   const vehicleType  = params.vehicleType   ?? 'Ride';
   const price        = Number(params.price  ?? 0);
 
@@ -238,9 +249,13 @@ export default function RidePreviewScreen() {
     ? { distance: `${activeRoute.distanceKm} km`, duration: `${activeRoute.durationMin} min` }
     : { distance: '—', duration: '—' };
 
+  const isKycApproved = Boolean(
+    driver?.documents?.length && driver.documents.every((doc) => doc.status === 'approved')
+  );
+
   // ── Accept ────────────────────────────────────────────────────────────────
   const handleAccept = () => {
-    if (!driverSocket.connected || !driver?.id) return;
+    if (!driverSocket.connected || !driver?.id || !isKycApproved) return;
     setAccepting(true);
     driverSocket.emit('acceptRide', { rideId, driverId: driver.id });
     console.log('[RidePreview] acceptRide emitted:', rideId);
@@ -251,6 +266,7 @@ export default function RidePreviewScreen() {
       params: {
         id: rideId,
         passengerName,
+        passengerImage,
         vehicleType,
         price: String(price),
         pLat: String(pickup.latitude), pLng: String(pickup.longitude), pName,
@@ -270,75 +286,49 @@ export default function RidePreviewScreen() {
       <StatusBar style="dark" translucent backgroundColor="transparent" />
 
       {/* Full-screen Map */}
-      <MapView
+      <CustomOsmMap
         ref={mapRef}
         style={StyleSheet.absoluteFillObject}
-        mapType="none"
-        loadingEnabled={true}
-        loadingBackgroundColor="#EAE6DF"
-        loadingIndicatorColor="#169F95"
         initialRegion={{
           latitude: pickup.latitude || 6.9271,
           longitude: pickup.longitude || 79.8612,
           latitudeDelta: 0.06,
           longitudeDelta: 0.06,
-        }}>
-        <UrlTile
-          urlTemplate={MAP_TILE_URL_TEMPLATE}
-          maximumZ={19}
-          flipY={false}
-        />
+        }}
+        markers={[
+          ...(mapMode === 'navigate' && hasDriverCoords
+            ? [{
+                id: 'driver',
+                coordinate: driverPos,
+                color: '#4A6FA5',
+                iconUri: getVehicleMarkerUri(driver?.vehicle?.category ?? vehicleType),
+                kind: 'vehicle' as const,
+                title: 'Your location',
+                zIndex: 50,
+              }]
+            : []),
+          ...(pickup.latitude !== 0
+            ? [{ id: 'pickup', coordinate: pickup, color: '#169F95', kind: 'label' as const, label: pName || 'Pickup', zIndex: 40 }]
+            : []),
+          ...(mapMode === 'trip' && dropoff.latitude !== 0
+            ? [{ id: 'dropoff', coordinate: dropoff, color: '#E74C3C', kind: 'label' as const, label: dName || 'Drop-off', zIndex: 40 }]
+            : []),
+        ]}
+        polylines={activeRoute ? [
+          { id: 'route-outer', coordinates: activeRoute.coords, color: mapMode === 'navigate' ? '#1A6B3C' : '#017270', width: 8, opacity: 0.9 },
+          { id: 'route-inner', coordinates: activeRoute.coords, color: mapMode === 'navigate' ? '#27AE60' : '#169F95', width: 4, opacity: 1 },
+        ] : []}
+      />
 
         {/* Driver position marker (navigate mode) */}
-        {mapMode === 'navigate' && hasDriverCoords && (
-          <Marker coordinate={driverPos} anchor={{ x: 0.5, y: 0.5 }} zIndex={5}>
-            <View style={styles.driverMarker}>
-              <Ionicons name="car-sport" size={16} color="#FFF" />
-            </View>
-          </Marker>
-        )}
 
         {/* Pickup marker */}
-        {pickup.latitude !== 0 && (
-          <Marker coordinate={pickup} anchor={{ x: 0.5, y: 1 }} zIndex={4}>
-            <View style={styles.markerPill}>
-              <View style={[styles.markerDot, { backgroundColor: '#169F95' }]} />
-              <Text style={styles.markerText} numberOfLines={1}>{pName || 'Pickup'}</Text>
-            </View>
-            <View style={styles.markerPointer} />
-          </Marker>
-        )}
 
         {/* Dropoff marker (trip mode) */}
-        {mapMode === 'trip' && dropoff.latitude !== 0 && (
-          <Marker coordinate={dropoff} anchor={{ x: 0.5, y: 1 }} zIndex={4}>
-            <View style={styles.markerPill}>
-              <View style={[styles.markerDot, { backgroundColor: '#E74C3C' }]} />
-              <Text style={styles.markerText} numberOfLines={1}>{dName || 'Drop-off'}</Text>
-            </View>
-            <View style={styles.markerPointer} />
-          </Marker>
-        )}
 
         {/* Route polyline — outer glow */}
-        {activeRoute && (
-          <Polyline
-            coordinates={activeRoute.coords}
-            strokeColor={mapMode === 'navigate' ? '#1A6B3C' : '#017270'}
-            strokeWidth={8}
-            lineJoin="round" lineCap="round" zIndex={2}
-          />
-        )}
         {/* Route polyline — inner */}
-        {activeRoute && (
-          <Polyline
-            coordinates={activeRoute.coords}
-            strokeColor={mapMode === 'navigate' ? '#27AE60' : '#169F95'}
-            strokeWidth={4}
-            lineJoin="round" lineCap="round" zIndex={3}
-          />
-        )}
-      </MapView>
+        
 
       {/* ── Top bar ── */}
       <SafeAreaView style={styles.topSafe}>
@@ -390,7 +380,19 @@ export default function RidePreviewScreen() {
             <Text style={styles.sheetEyebrow}>
               {mapMode === 'navigate' ? '🧭 NAVIGATE TO PASSENGER' : '🚗 RIDE ROUTE PREVIEW'}
             </Text>
-            <Text style={styles.sheetTitle}>{vehicleType} · {passengerName}</Text>
+            <View style={styles.passengerHeaderRow}>
+              <View style={styles.passengerAvatar}>
+                {passengerImage ? (
+                  <Image source={{ uri: passengerImage }} style={styles.passengerAvatarImage} />
+                ) : (
+                  <Text style={styles.passengerAvatarText}>{passengerName.trim().charAt(0).toUpperCase() || 'P'}</Text>
+                )}
+              </View>
+              <View style={styles.vehicleTypeChip}>
+                <VehicleCategoryIcon category={vehicleType} size={28} active />
+              </View>
+              <Text style={[styles.sheetTitle, styles.sheetTitleInline]}>{vehicleType} · {passengerName}</Text>
+            </View>
 
             {/* Stat chips */}
             <View style={styles.statsRow}>
@@ -403,6 +405,20 @@ export default function RidePreviewScreen() {
                 value={`LKR ${price.toLocaleString()}`}
                 color="#27AE60"
               />
+            </View>
+
+            <View style={styles.driverDetailsCard}>
+              <View style={styles.driverDetailsIcon}>
+                <VehicleCategoryIcon category={driver?.vehicle?.category ?? vehicleType} size={28} active />
+              </View>
+              <View style={styles.driverDetailsText}>
+                <Text style={styles.driverDetailsTitle}>{driver?.fullName || 'Driver profile'}</Text>
+                <Text style={styles.driverDetailsMeta} numberOfLines={1}>{formatDriverVehicle(driver)}</Text>
+              </View>
+              <View style={styles.driverPlatePill}>
+                <Text style={styles.driverPlateLabel}>PLATE</Text>
+                <Text style={styles.driverPlateText}>{driver?.vehicle?.plateNumber || 'N/A'}</Text>
+              </View>
             </View>
 
             {/* Route summary */}
@@ -430,9 +446,9 @@ export default function RidePreviewScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.acceptBtn, accepting && styles.acceptBtnDisabled]}
+                style={[styles.acceptBtn, (accepting || !isKycApproved) && styles.acceptBtnDisabled]}
                 onPress={handleAccept}
-                disabled={accepting}>
+                disabled={accepting || !isKycApproved}>
                 {accepting
                   ? <ActivityIndicator color="#FFF" size="small" />
                   : <Ionicons name="checkmark-circle-outline" size={20} color="#FFF" />}
@@ -441,6 +457,11 @@ export default function RidePreviewScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
+            {!isKycApproved && (
+              <Text style={styles.kycNote}>
+                Upload and get approval for license, insurance, and registration to accept rides.
+              </Text>
+            )}
           </>
         )}
       </View>
@@ -550,7 +571,67 @@ const styles = StyleSheet.create({
   handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: '#A0B3B2', opacity: 0.5 },
   sheetEyebrow: { fontSize: 11, fontWeight: '900', color: teal, marginBottom: 4 },
   sheetTitle:   { fontSize: 22, fontWeight: '900', color: '#102A28', marginBottom: 14 },
+  sheetTitleInline: { flex: 1, marginBottom: 0 },
+  passengerHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
+  passengerAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#E7F5F3',
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  passengerAvatarImage: { width: '100%', height: '100%' },
+  passengerAvatarText: { color: teal, fontSize: 17, fontWeight: '900' },
+  vehicleTypeChip: {
+    width: 42,
+    height: 34,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#F7FBFA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
   statsRow:     { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  driverDetailsCard: {
+    minHeight: 62,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#D9E9E6',
+    backgroundColor: '#F7FBFA',
+    padding: 10,
+    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  driverDetailsIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#E7F5F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  driverDetailsText: { flex: 1, minWidth: 0 },
+  driverDetailsTitle: { color: '#102A28', fontSize: 14, fontWeight: '900' },
+  driverDetailsMeta: { color: '#617C79', fontSize: 12, fontWeight: '700', marginTop: 2 },
+  driverPlatePill: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#CFE6E3',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+  driverPlateLabel: { color: '#8CA1A0', fontSize: 8, fontWeight: '900' },
+  driverPlateText: { color: teal, fontSize: 11, fontWeight: '900', marginTop: 1 },
   routeBlock: {
     backgroundColor: '#F7FBFA', borderRadius: 16,
     borderWidth: 1, borderColor: '#D9E9E6',
@@ -571,6 +652,13 @@ const styles = StyleSheet.create({
   },
   acceptBtnDisabled: { backgroundColor: '#4A9A98' },
   acceptBtnText: { fontSize: 15, fontWeight: '900', color: '#FFFFFF' },
+  kycNote: {
+    marginTop: 10,
+    color: '#C2410C',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
   loadingWrap: { alignItems: 'center', paddingVertical: 40 },
   loadingText: { marginTop: 10, fontWeight: '700', color: teal },
 });
