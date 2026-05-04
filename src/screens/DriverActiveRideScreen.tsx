@@ -478,7 +478,7 @@ export default function DriverActiveRideScreen() {
     };
 
     const beginTracking = async () => {
-      const permission = await Location.requestForegroundPermissionsAsync();
+      const permission = await Location.getForegroundPermissionsAsync();
       if (permission.status !== 'granted') return;
 
       headingSub = await Location.watchHeadingAsync((heading) => {
@@ -515,7 +515,9 @@ export default function DriverActiveRideScreen() {
       );
     };
 
-    beginTracking();
+    beginTracking().catch((error) => {
+      console.warn('[ActiveRide] location tracking failed:', error);
+    });
 
     const handleStatusUpdate = (payload: { rideId: string; canonicalStatus?: string; status?: string }) => {
       if (payload.rideId !== rideId) return;

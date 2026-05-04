@@ -101,25 +101,29 @@ export default function DriverHomeScreen() {
   useEffect(() => {
     let watchSubscription: Location.LocationSubscription | null = null;
     (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        console.log('[Driver] Permission to access location was denied');
-        return;
-      }
-      // Get initial pos immediately to show map fast
-      let initPos = await Location.getCurrentPositionAsync({});
-      setDriverCoords({ latitude: initPos.coords.latitude, longitude: initPos.coords.longitude });
-
-      watchSubscription = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 5000,
-          distanceInterval: 10,
-        },
-        (loc) => {
-          setDriverCoords({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+      try {
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          console.log('[Driver] Permission to access location was denied');
+          return;
         }
-      );
+        // Get initial pos immediately to show map fast
+        const initPos = await Location.getCurrentPositionAsync({});
+        setDriverCoords({ latitude: initPos.coords.latitude, longitude: initPos.coords.longitude });
+
+        watchSubscription = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.High,
+            timeInterval: 5000,
+            distanceInterval: 10,
+          },
+          (loc) => {
+            setDriverCoords({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+          }
+        );
+      } catch (error) {
+        console.warn('[Driver] Location setup failed:', error);
+      }
     })();
     return () => { watchSubscription?.remove(); };
   }, []);

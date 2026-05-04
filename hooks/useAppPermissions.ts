@@ -59,6 +59,7 @@ export function useAppPermissions() {
         setChecking(false);
         return;
       }
+      await AsyncStorage.setItem(PERMISSIONS_BOOTSTRAP_KEY, new Date().toISOString());
 
       const nextSummary: PermissionSummary = { ...initialSummary };
 
@@ -127,7 +128,12 @@ export function useAppPermissions() {
       }
 
       setSummary(nextSummary);
-      await AsyncStorage.setItem(PERMISSIONS_BOOTSTRAP_KEY, new Date().toISOString());
+    } catch (error) {
+      console.warn('[Permissions] Unable to request runtime permissions:', error);
+      showSettingsAlert(
+        'Permissions need a fresh build',
+        'NexGO Driver could not open the location permission prompt because the installed app does not include the latest iOS permission descriptions. Please rebuild and reinstall the app, then try again.'
+      );
     } finally {
       setChecking(false);
       hasStartedRef.current = false;
