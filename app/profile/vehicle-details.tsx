@@ -276,12 +276,6 @@ export default function DriverVehicleDetailsScreen() {
                   <Text style={styles.primaryButtonText}>{vehicle ? 'Added' : 'Add'}</Text>
                 </Pressable>
 
-                <Pressable
-                  style={[styles.refreshButton, isVehicleLoading && styles.refreshButtonDisabled]}
-                  onPress={() => loadVehicle({ showSuccess: true })}
-                  disabled={isVehicleLoading}>
-                  <Ionicons name="refresh" size={18} color={teal} />
-                </Pressable>
               </View>
             </View>
           </View>
@@ -773,19 +767,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'flex-end',
     gap: 8,
-  },
-  refreshButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 1,
-    borderColor: '#D9E9E6',
-    backgroundColor: '#E7F5F3',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  refreshButtonDisabled: {
-    opacity: 0.55,
   },
   loadingText: {
     color: '#617C79',
